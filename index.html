@@ -723,7 +723,9 @@ nav {
   margin-right:.35rem;
 }
 .rt-admin    { background:rgba(239,68,68,.15); color:#f87171; }
+.rt-dir      { background:rgba(34,197,94,.15); color:#4ade80; }
 .rt-teacher  { background:rgba(0,83,163,.2); color:#93c5fd; }
+.nav-role-badge { font-size:.6rem; font-weight:700; padding:.13rem .45rem; border-radius:999px; text-transform:uppercase; letter-spacing:.04em; }
 
 .btn-xs {
   font-size:.7rem; padding:.22rem .6rem; border-radius:999px;
@@ -1249,12 +1251,35 @@ const S = {
 
 function loadSession(){
   try {
+    const exp=localStorage.getItem('lft_session_exp');
+    if(exp && Date.now() > parseInt(exp)){ clearSession(); return; }
     const u=localStorage.getItem('lft_u');
     if(u) S.user=JSON.parse(u);
   }catch(e){}
 }
-function saveSession(u){ localStorage.setItem('lft_u',JSON.stringify(u)); }
-function clearSession(){ localStorage.removeItem('lft_u'); localStorage.removeItem('lft_e'); localStorage.removeItem('lft_p'); S.user=null; }
+function saveSession(u){
+  localStorage.setItem('lft_u',JSON.stringify(u));
+  localStorage.setItem('lft_session_exp', Date.now() + 8*60*60*1000); // 8h
+}
+function clearSession(){
+  localStorage.removeItem('lft_u'); localStorage.removeItem('lft_e');
+  localStorage.removeItem('lft_p'); localStorage.removeItem('lft_session_exp');
+  S.user=null;
+}
+function checkSessionExpiry(){
+  const exp=localStorage.getItem('lft_session_exp');
+  if(S.user && exp && Date.now() > parseInt(exp)){
+    clearSession(); updateHeader(); toast('Session expirée – veuillez vous reconnecter.','⏰');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PERMISSIONS
+═══════════════════════════════════════════════════════════ */
+function canAdd(){ return !!S.user; }
+function canEdit(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||S.user.email===p.Created_By); }
+function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'); }
+function canRequestDeletion(){ return S.user && S.user.role==='enseignant'; }
 
 /* ═══════════════════════════════════════════════════════════
    API
@@ -1296,12 +1321,41 @@ function updateHeader(){
     pill.style.display='flex';
     bl.style.display='none'; bo.style.display='';
     document.getElementById('user-name-nav').textContent=(S.user.prenom||'')+' '+(S.user.nom||'');
-    document.getElementById('user-role-nav').textContent=S.user.role==='admin'?'Admin':'Enseignant';
+    const roleL={admin:'Admin',direction:'Direction',enseignant:'Enseignant'};
+    const roleC={admin:'rt-admin',direction:'rt-dir',enseignant:'rt-teacher'};
+    const rEl=document.getElementById('user-role-nav');
+    rEl.textContent=roleL[S.user.role]||S.user.role;
+    rEl.className='nav-role-badge '+(roleC[S.user.role]||'rt-teacher');
+    // Bouton suppression de compte pour enseignants
+    let delBtn=document.getElementById('btn-del-account');
+    if(!delBtn){
+      delBtn=document.createElement('button');
+      delBtn.id='btn-del-account';
+      delBtn.className='btn btn-ghost';
+      delBtn.style.cssText='font-size:.7rem;padding:.2rem .55rem;margin-left:.4rem;opacity:.6;display:none';
+      delBtn.textContent='Supprimer mon compte';
+      delBtn.onclick=requestAccountDeletion;
+      bo.parentNode.insertBefore(delBtn, bo.nextSibling);
+    }
+    delBtn.style.display=canRequestDeletion()?'':'none';
   } else {
     pill.style.display='none'; bl.style.display=''; bo.style.display='none';
+    const delBtn=document.getElementById('btn-del-account');
+    if(delBtn) delBtn.style.display='none';
   }
 }
 function doLogout(){ clearSession(); updateHeader(); showDashboard(); toast('Déconnecté','👋'); }
+
+async function requestAccountDeletion(){
+  confirm2('Demander la suppression de mon compte',
+    'Un email sera envoyé à l\'administrateur pour demander la suppression de votre compte. Continuer ?',
+    async()=>{
+      try {
+        const d=await apiGet({action:'request-deletion',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+        toast(d.success?(d.message||'Demande envoyée.'):(d.error||'Erreur.'), d.success?'📧':'❌');
+      } catch(e){ toast('Erreur réseau.','❌'); }
+    });
+}
 
 /* ═══════════════════════════════════════════════════════════
    BREADCRUMB
@@ -1375,16 +1429,25 @@ function openRegister(){
 }
 function openForgot(){
   document.getElementById('auth-body').innerHTML=`
-    <h2>🔑 Réinitialiser le mot de passe</h2>
-    <div class="msg-info">Renseignez votre email et votre nouveau mot de passe.</div>
+    <h2>🔑 Mot de passe oublié</h2>
+    <div class="msg-info">Saisissez votre adresse @egd.mg. Vous recevrez un lien de réinitialisation valable 24 h.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
-    <div class="fg"><label>Email @egd.mg</label><input type="email" id="f-em" placeholder="votre.email@egd.mg"></div>
-    <div class="fg-row">
-      <div class="fg"><label>Nouveau mot de passe</label><input type="password" id="f-pw" placeholder="Min. 6 car."></div>
-      <div class="fg"><label>Confirmer</label><input type="password" id="f-p2" placeholder="Répéter"></div>
-    </div>
-    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doReset()">Réinitialiser</button>
+    <div class="fg"><label>Email @egd.mg</label>
+      <input type="email" id="f-em" placeholder="votre.email@egd.mg" onkeydown="if(event.key==='Enter')doForgotPassword()"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForgotPassword()">Envoyer le lien</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
+}
+function openResetForm(token){
+  document.getElementById('auth-ov').classList.add('open');
+  document.getElementById('auth-body').innerHTML=`
+    <h2>🔑 Nouveau mot de passe</h2>
+    <div class="msg-info">Choisissez un nouveau mot de passe (min. 6 caractères).</div>
+    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
+    <div class="fg"><label>Nouveau mot de passe</label>
+      <input type="password" id="f-pw" placeholder="Min. 6 car."></div>
+    <div class="fg"><label>Confirmer</label>
+      <input type="password" id="f-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doConfirmReset('${token}')"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doConfirmReset('${token}')">Enregistrer</button>`;
 }
 function closeAuth(){ document.getElementById('auth-ov').classList.remove('open'); }
 
@@ -1415,17 +1478,29 @@ async function doRegister(){
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
 }
-async function doReset(){
-  const em=v('f-em').toLowerCase(), pw=v('f-pw'), p2=v('f-p2');
+async function doForgotPassword(){
+  const em=v('f-em').toLowerCase();
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!em||!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
+  if(!em){ err.textContent='Veuillez saisir votre adresse email.'; err.style.display='block'; return; }
+  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
+  try {
+    const d=await apiGet({action:'forgot-password',email:em});
+    if(d.success){ ok.textContent=d.message||'Email envoyé. Vérifiez votre boîte mail.'; ok.style.display='block'; }
+    else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
+  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+}
+async function doConfirmReset(token){
+  const pw=v('f-pw'), p2=v('f-p2');
+  const err=document.getElementById('ae'), ok=document.getElementById('ao');
+  err.style.display='none'; ok.style.display='none';
+  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
   if(pw.length<6){ err.textContent='Mot de passe : minimum 6 caractères.'; err.style.display='block'; return; }
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
   try {
-    const d=await apiPost({action:'reset-password'},{Email:em,Mot_de_Passe:pw});
-    if(d.success){ ok.textContent='Mot de passe modifié ! Vous pouvez vous connecter.'; ok.style.display='block'; setTimeout(openLogin,2000); }
-    else { err.textContent=d.error||'Email introuvable.'; err.style.display='block'; }
+    const d=await apiPost({action:'confirm-reset'},{token,password:pw});
+    if(d.success){ ok.textContent=d.message||'Mot de passe modifié !'; ok.style.display='block'; setTimeout(openLogin,2200); }
+    else { err.textContent=d.error||'Token invalide ou expiré.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
 }
 
@@ -1698,7 +1773,7 @@ function goDetail(id){
 function renderDetail(p){
   const s=computeStatus(p);
   const ci=CATS[p.Categorie]||{cb:'cb-def'};
-  const canEdit=S.user&&(S.user.role==='admin'||S.user.email===p.Created_By);
+  const cEdit=canEdit(p); const cDel=canDelete(p);
   const axN=p.Axe_Projet_Etablissement?(p.Axe_Projet_Etablissement.match(/\d/)||[])[0]:'';
   const ax=AXES.find(a=>String(a.n)===axN);
   const objs=p.Objectifs_Pedagogiques?p.Objectifs_Pedagogiques.split('|').filter(Boolean):'';
@@ -1753,8 +1828,8 @@ function renderDetail(p){
       </div>
 
       <div class="detail-actions">
-        ${canEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>
-        <button class="btn btn-danger" onclick="delProject('${p.ID_Projet}')">🗑️ Supprimer</button>`:''}
+        ${cEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>`:''}
+        ${cDel?`<button class="btn btn-danger" onclick="delProject('${p.ID_Projet}')">🗑️ Supprimer</button>`:''}
         <button class="btn btn-back" onclick="history.go(-1)">← Retour</button>
       </div>
     </div>`;
@@ -2152,12 +2227,15 @@ async function renderAdmin(mc){
   if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
   mc.innerHTML=`<div class="sec-hd"><div class="sec-title">⚙️ Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
   try {
-    const [ud,ed]=await Promise.all([
+    const [ud,ed,ld]=await Promise.all([
       apiGet({action:'list',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')}),
-      apiGet({action:'list-emails',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')})
+      apiGet({action:'list-emails',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')}),
+      apiGet({action:'get-logs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')})
     ]);
     const us=ud.success?ud.data||[]:[];
     const em=ed.success?ed.data||[]:[];
+    const logs=ld.success?ld.data||[]:[];
+    const roleTag=(r)=>`<span class="role-tag ${r==='admin'?'rt-admin':r==='direction'?'rt-dir':'rt-teacher'}">${r||'enseignant'}</span>`;
     mc.innerHTML=`
       <div class="sec-hd"><div class="sec-title">⚙️ Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
       <div class="admin-grid">
@@ -2169,14 +2247,31 @@ async function renderAdmin(mc){
               <div class="row-sub">${u.Email||''}</div>
             </div>
             <div style="display:flex;align-items:center;gap:.35rem">
-              <span class="role-tag ${u.Role==='admin'?'rt-admin':'rt-teacher'}">${u.Role||'enseignant'}</span>
+              ${roleTag(u.Role)}
               ${u.Email!==(S.user&&S.user.email)?`<button class="btn-xs bx-del" onclick="delUser('${u.Email}')">✕</button>`:''}
             </div>
           </div>`).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">➕ Créer un compte</div>
+          <div class="fg-row" style="gap:.5rem;margin-top:.45rem">
+            <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Prénom</label><input class="admin-input" type="text" id="nu-pn" placeholder="Jean"></div>
+            <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Nom</label><input class="admin-input" type="text" id="nu-nm" placeholder="DUPONT"></div>
+          </div>
+          <div style="margin:.3rem 0"><label style="font-size:.7rem;color:var(--t3)">Email @egd.mg</label><input class="admin-input" type="email" id="nu-em" placeholder="jean.dupont@egd.mg" style="width:100%;margin-top:.2rem"></div>
+          <div class="fg-row" style="gap:.5rem;margin:.3rem 0">
+            <div class="fg" style="flex:1"><label style="font-size:.7rem">Mot de passe</label><input class="admin-input" type="password" id="nu-pw" placeholder="Min. 6 car."></div>
+            <div class="fg" style="flex:1"><label style="font-size:.7rem">Rôle</label>
+              <select class="admin-input" id="nu-ro">
+                <option value="enseignant">Enseignant</option>
+                <option value="direction">Direction</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-xs bx-add" onclick="addUser()" style="width:100%;margin-top:.4rem">Créer l'utilisateur</button>
         </div>
         <div class="admin-card">
           <div class="admin-card-hd">✉️ Emails autorisés <small>${em.length} adresses</small></div>
-          <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'inscrire.</p>
+          <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'auto-inscrire.</p>
           ${em.map(e=>`<div class="row-item">
             <span style="font-size:.82rem;color:var(--t1)">${e.Email||e}</span>
             <button class="btn-xs bx-del" onclick="delEmail('${e.Email||e}')">✕</button>
@@ -2185,15 +2280,35 @@ async function renderAdmin(mc){
             <input class="admin-input" type="email" id="new-em" placeholder="prenom.nom@egd.mg">
             <button class="btn-xs bx-add" onclick="addEmail()">Ajouter</button>
           </div>
-        </div>
-        <div class="admin-card full">
-          <div class="admin-card-hd">📊 Statistiques</div>
-          <div style="display:flex;gap:2rem;flex-wrap:wrap">
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">📊 Statistiques</div>
+          <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.5rem">
             ${Object.entries(CATS).map(([cat,i])=>{
               const cnt=S.projects.filter(p=>p.Categorie===cat).length;
-              return `<div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.8rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.72rem;color:var(--t3)">${cat}</div></div>`;
+              return `<div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.65rem;color:var(--t3)">${cat}</div></div>`;
             }).join('')}
-            <div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.8rem;font-weight:700;color:var(--t0)">${S.projects.length}</div><div style="font-size:.72rem;color:var(--t3)">Total</div></div>
+            <div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:700;color:var(--aefe-blue)">${S.projects.length}</div><div style="font-size:.65rem;color:var(--t3)">Total</div></div>
+          </div>
+        </div>
+        <div class="admin-card full">
+          <div class="admin-card-hd">🗒️ Journal d'activité <small>${logs.length} entrées</small></div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:.73rem">
+              <thead><tr style="color:var(--t3)">
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Date</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Utilisateur</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Rôle</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Action</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Détail</th>
+              </tr></thead>
+              <tbody>${logs.slice(0,50).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${l.Date_Heure||''}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Email||''}</td>
+                <td style="padding:.28rem .5rem">${roleTag(l.Role)}</td>
+                <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${l.Action||''}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Detail||''}</td>
+              </tr>`).join('')||'<tr><td colspan="5" style="color:var(--t3);padding:.5rem">Aucun journal.</td></tr>'}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>`;
@@ -2207,16 +2322,29 @@ async function delUser(email){
     else toast(d.error||'Erreur.','❌');
   });
 }
+async function addUser(){
+  const pn=(document.getElementById('nu-pn')||{}).value?.trim();
+  const nm=(document.getElementById('nu-nm')||{}).value?.trim().toUpperCase();
+  const em=(document.getElementById('nu-em')||{}).value?.trim().toLowerCase();
+  const pw=(document.getElementById('nu-pw')||{}).value?.trim();
+  const ro=(document.getElementById('nu-ro')||{}).value||'enseignant';
+  if(!pn||!nm||!em||!pw){ toast('Tous les champs sont obligatoires.','⚠️'); return; }
+  if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
+  if(pw.length<6){ toast('Mot de passe : min. 6 caractères.','⚠️'); return; }
+  const d=await apiPost({action:'add',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{Email:em,Mot_de_Passe:pw,Role:ro,Nom:nm,Prenom:pn,Reset_Token:'',Reset_Expiry:''});
+  if(d.success){ renderAdmin(document.getElementById('mc')); toast('Utilisateur créé !','✅'); }
+  else toast(d.error||'Erreur.','❌');
+}
 async function addEmail(){
   const inp=document.getElementById('new-em'), em=inp.value.trim().toLowerCase();
   if(!em||!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  const d=await apiPost({action:'add-email',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{Email:em});
+  const d=await apiPost({action:'add-email',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{email:em});
   if(d.success){ inp.value=''; renderAdmin(document.getElementById('mc')); toast('Email autorisé ajouté.','✅'); }
   else toast(d.error||'Erreur.','❌');
 }
 async function delEmail(email){
   confirm2('Retirer cet email',`Retirer ${email} des emails autorisés ?`, async()=>{
-    const d=await apiGet({action:'delete-email',email_target:email,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const d=await apiGet({action:'delete-email',target:email,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
     if(d.success){ renderAdmin(document.getElementById('mc')); toast('Email retiré.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
@@ -2237,8 +2365,14 @@ function renderTutoriel(mc){
       <li>Le statut est calculé automatiquement selon les dates</li>
     </ul></div>
     <div class="info-card"><h2>Droits d'accès</h2><ul>
-      <li><strong>Enseignant :</strong> crée et modifie ses propres projets</li>
-      <li><strong>Administrateur :</strong> gère tous les projets, comptes et emails autorisés</li>
+      <li><strong>Enseignant :</strong> crée et modifie ses propres projets · peut demander la suppression de son compte</li>
+      <li><strong>Direction :</strong> crée, modifie et supprime tous les projets</li>
+      <li><strong>Administrateur :</strong> accès complet — projets, comptes utilisateurs, emails autorisés, journal d'activité</li>
+    </ul></div>
+    <div class="info-card"><h2>Mot de passe oublié</h2><ul>
+      <li>Cliquez sur <strong>🔒 Connexion</strong> → <em>Mot de passe oublié ?</em></li>
+      <li>Renseignez votre adresse @egd.mg</li>
+      <li>Vous recevrez un lien de réinitialisation valable 24 heures</li>
     </ul></div>`;
 }
 
@@ -2275,8 +2409,22 @@ async function init(){
   document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement des projets…</div>`;
   setBc([]);
   await loadProjects();
+  // Détecter un token de réinitialisation dans l'URL (?reset=TOKEN)
+  const params=new URLSearchParams(window.location.search);
+  const resetToken=params.get('reset');
+  if(resetToken){
+    window.history.replaceState({},document.title,window.location.pathname);
+    openResetForm(resetToken);
+  }
   renderDashboard();
 }
+// Vérifier l'expiration de session à chaque navigation
+const _origShowDashboard=showDashboard;
+function showDashboard(){ checkSessionExpiry(); _origShowDashboard(); }
+const _origShowPage=showPage;
+function showPage(pg){ checkSessionExpiry(); _origShowPage(pg); }
+const _origGoCategory=goCategory;
+function goCategory(cat){ checkSessionExpiry(); _origGoCategory(cat); }
 init();
 </script>
 </body>
