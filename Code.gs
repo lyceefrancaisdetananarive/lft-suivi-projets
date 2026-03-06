@@ -152,6 +152,7 @@ function doPost(e) {
       case 'register':      return handleRegister(e);
       case 'confirm-reset': return handleConfirmReset(e);
       case 'add-email':     return handleAddEmail(e);
+      case 'change-role':   return handleChangeRole(e);
       default: return jsonResponse({ success: false, error: 'Action non reconnue' });
     }
   } catch (err) { return jsonResponse({ success: false, error: err.toString() }); }
@@ -352,6 +353,44 @@ function handleGetLogs(e) {
     results.push(row);
   }
   return jsonResponse({ success: true, data: results });
+}
+
+// ============================================================
+// CHANGE ROLE (admin uniquement)
+// ============================================================
+
+function handleChangeRole(e) {
+  const admin = authenticate(e.parameter.email, e.parameter.password);
+  if (!isAdmin(admin)) return jsonResponse({ success: false, error: 'Admin requis' });
+
+  const body        = JSON.parse(e.postData.contents);
+  const targetEmail = (body.email || '').trim().toLowerCase();
+  const newRole     = (body.role  || '').trim().toLowerCase();
+
+  if (!['admin', 'direction', 'enseignant'].includes(newRole)) {
+    return jsonResponse({ success: false, error: 'Role invalide' });
+  }
+  if (targetEmail === e.parameter.email.trim().toLowerCase()) {
+    return jsonResponse({ success: false, error: 'Vous ne pouvez pas changer votre propre role' });
+  }
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
+
+  const data     = sheet.getDataRange().getValues();
+  const headers  = data[0];
+  const emailIdx = headers.indexOf('Email');
+  const roleIdx  = headers.indexOf('Role');
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase() === targetEmail) {
+      const oldRole = data[i][roleIdx].toString();
+      sheet.getRange(i + 1, roleIdx + 1).setValue(newRole);
+      addLog(e.parameter.email, admin.role, 'change_role', targetEmail + ': ' + oldRole + ' -> ' + newRole);
+      return jsonResponse({ success: true, message: 'Role modifie : ' + oldRole + ' → ' + newRole });
+    }
+  }
+  return jsonResponse({ success: false, error: 'Utilisateur introuvable' });
 }
 
 // ============================================================
