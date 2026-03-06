@@ -1508,6 +1508,7 @@ async function doConfirmReset(token){
    DASHBOARD
 ═══════════════════════════════════════════════════════════ */
 function showDashboard(){
+  checkSessionExpiry();
   S.page='dashboard'; S.filter=null; S.search=''; S.statusFilter='all';
   setBc([]); renderDashboard();
 }
@@ -1650,6 +1651,7 @@ function renderDashboard(){
    CATEGORY PAGE
 ═══════════════════════════════════════════════════════════ */
 function goCategory(cat){
+  checkSessionExpiry();
   S.page='category'; S.filter=cat; S.search=''; S.statusFilter='all';
   setBc([{l:cat}]); renderCatPage(cat);
 }
@@ -1702,6 +1704,7 @@ function renderGrid(container){
    FILTERED PAGE (from hero stats)
 ═══════════════════════════════════════════════════════════ */
 function goFiltered(sf){
+  checkSessionExpiry();
   S.page='filtered'; S.filter=sf; S.search=''; S.statusFilter='all';
   const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
   setBc([{l:labels[sf]||'Projets'}]); renderFilteredPage(sf);
@@ -1970,6 +1973,7 @@ function closeForm(){ document.getElementById('form-ov').classList.remove('open'
    PAGES
 ═══════════════════════════════════════════════════════════ */
 function showPage(pg){
+  checkSessionExpiry();
   S.page=pg; S.filter=null;
   const lbls={chronologie:'Chronologie',etab:"Projet d'Établissement",clubs:'Clubs & Activités',
     internat:"Projets de l'Internat",admin:'Administration',tutoriel:'Tutoriels',mentions:'Mentions légales'};
@@ -2418,13 +2422,6 @@ async function init(){
   }
   renderDashboard();
 }
-// Vérifier l'expiration de session à chaque navigation
-const _origShowDashboard=showDashboard;
-function showDashboard(){ checkSessionExpiry(); _origShowDashboard(); }
-const _origShowPage=showPage;
-function showPage(pg){ checkSessionExpiry(); _origShowPage(pg); }
-const _origGoCategory=goCategory;
-function goCategory(cat){ checkSessionExpiry(); _origGoCategory(cat); }
 init();
 </script>
 </body>
