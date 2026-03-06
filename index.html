@@ -885,21 +885,170 @@ footer a { color:var(--t2); }
 footer a:hover { color:var(--t0); }
 
 /* ═══════════════════════════════════════
+   PROJET D'ÉTABLISSEMENT — styles officiels
+═══════════════════════════════════════ */
+/* Section header avec bordure gauche (style doc officiel) */
+.pe-section { margin-bottom:1.6rem; }
+.pe-section-hd {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:1rem; font-weight:700; color:var(--t0);
+  text-transform:uppercase; letter-spacing:.05em;
+  padding:.1rem 0 .7rem .9rem;
+  border-left:3px solid var(--aefe-blue);
+  margin-bottom:.9rem;
+}
+/* Bloc hero PE */
+.pe-hero {
+  border-radius:var(--r-xl); padding:2rem 1.8rem 1.7rem;
+  margin-bottom:1.5rem;
+  background:linear-gradient(135deg,rgba(0,83,163,.18) 0%,rgba(6,21,37,.5) 55%,rgba(212,8,131,.12) 100%);
+  border:1px solid rgba(0,83,163,.25);
+  backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+}
+.pe-badge {
+  font-size:.68rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:rgba(0,163,255,.85); margin-bottom:.45rem;
+}
+.pe-title {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:clamp(1.1rem,2.5vw,1.55rem); font-weight:700;
+  color:var(--t0); line-height:1.2; margin-bottom:.3rem;
+}
+.pe-subtitle { font-size:.78rem; color:var(--t2); margin-bottom:1.2rem; }
+.pe-kpis { display:flex; gap:.65rem; flex-wrap:wrap; margin-bottom:1.3rem; }
+.pe-kpi {
+  display:flex; flex-direction:column; align-items:center;
+  padding:.65rem 1rem;
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
+  border-radius:var(--r-lg); min-width:85px; text-align:center;
+}
+.pe-kpi-n {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:1.5rem; font-weight:700; color:#fff; line-height:1;
+}
+.pe-kpi-l { font-size:.66rem; color:var(--t2); margin-top:.2rem; font-weight:500; }
+.pe-labels { display:flex; gap:.6rem; flex-wrap:wrap; }
+.pe-label {
+  display:flex; align-items:center; gap:.45rem; padding:.5rem .85rem;
+  background:rgba(0,83,163,.12); border:1px solid rgba(0,83,163,.25);
+  border-radius:var(--r-md); font-size:.74rem; color:var(--t1); line-height:1.35;
+}
+.pe-label-icon { font-size:1rem; }
+.pe-label small { font-size:.65rem; color:var(--t2); display:block; }
+
+/* SWOT */
+.swot-grid {
+  display:grid; grid-template-columns:repeat(2,1fr);
+  gap:.75rem; margin-bottom:.5rem;
+}
+.swot-card {
+  border-radius:var(--r-lg); padding:1.1rem 1.2rem;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+}
+.swot-card .swot-hd {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:.88rem; font-weight:700; margin-bottom:.6rem;
+}
+.swot-card ul { font-size:.79rem; color:var(--t1); padding-left:1rem; line-height:1.8; margin:0; }
+.swot-forces    { background:rgba(34,197,94,.09);  border:1px solid rgba(34,197,94,.22); }
+.swot-forces    .swot-hd { color:#4ade80; }
+.swot-faiblesses { background:rgba(251,146,60,.09); border:1px solid rgba(251,146,60,.22); }
+.swot-faiblesses .swot-hd { color:#fb923c; }
+.swot-opportunites { background:rgba(0,83,163,.1);  border:1px solid rgba(0,83,163,.28); }
+.swot-opportunites .swot-hd { color:#60a5fa; }
+.swot-menaces   { background:rgba(212,8,131,.08); border:1px solid rgba(212,8,131,.22); }
+.swot-menaces   .swot-hd { color:#f472b6; }
+
+/* Axes détaillés (objectifs / actions / indicateurs) */
+.axe-detail-card {
+  border-radius:var(--r-xl); padding:1.6rem 1.5rem; margin-bottom:1.1rem;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+}
+.axe-d1 { background:rgba(0,83,163,.1);   border:1px solid rgba(0,83,163,.25); }
+.axe-d2 { background:rgba(34,197,94,.07); border:1px solid rgba(34,197,94,.2); }
+.axe-d3 { background:rgba(212,8,131,.07); border:1px solid rgba(212,8,131,.2); }
+.axe-detail-header { display:flex; align-items:flex-start; gap:1rem; margin-bottom:1.2rem; }
+.axe-num-badge {
+  width:40px; height:40px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',Georgia,serif; font-size:1.15rem; font-weight:700; color:#fff;
+}
+.axe-d1 .axe-num-badge { background:var(--aefe-blue); }
+.axe-d2 .axe-num-badge { background:#16a34a; }
+.axe-d3 .axe-num-badge { background:var(--aefe-magenta); }
+.axe-detail-title {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:.98rem; font-weight:700; color:var(--t0); line-height:1.3; padding-top:.1rem;
+}
+.axe-detail-grid {
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:.7rem; margin-bottom:1rem;
+}
+.axe-col {
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  border-radius:var(--r-md); padding:.85rem 1rem;
+}
+.axe-col-hd {
+  font-size:.68rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--t2); margin-bottom:.55rem;
+}
+.axe-col ul { font-size:.79rem; color:var(--t1); padding-left:.9rem; line-height:1.8; margin:0; }
+
+/* Hero labels institutionnels */
+.hero-labels {
+  display:flex; gap:.45rem; flex-wrap:wrap; justify-content:center; margin-top:.9rem;
+}
+.hero-label-badge {
+  font-size:.67rem; padding:.18rem .68rem; border-radius:999px;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.13);
+  color:rgba(255,255,255,.58); font-weight:500;
+}
+
+/* Clubs & vie associative */
+.clubs-grid {
+  display:grid; grid-template-columns:repeat(2,1fr); gap:.9rem;
+}
+.club-card {
+  border-radius:var(--r-lg); padding:1.2rem 1.3rem;
+  display:flex; gap:.85rem; align-items:flex-start;
+  transition:all var(--dur) var(--ease);
+}
+.club-card:hover { background:var(--g2); transform:translateY(-2px); }
+.club-icon { font-size:1.8rem; line-height:1; flex-shrink:0; padding-top:.1rem; }
+.club-content { flex:1; }
+.club-name {
+  font-family:'Fraunces',Georgia,serif;
+  font-size:.93rem; font-weight:700; color:var(--t0); margin-bottom:.2rem;
+}
+.club-since {
+  display:inline-block; font-size:.64rem; font-weight:600;
+  padding:.1rem .5rem; border-radius:999px; margin-bottom:.3rem;
+  background:rgba(0,83,163,.15); border:1px solid rgba(0,83,163,.3); color:#93c5fd;
+}
+.club-desc { font-size:.79rem; color:var(--t2); line-height:1.6; margin-bottom:.45rem; }
+
+/* ═══════════════════════════════════════
    RESPONSIVE
 ═══════════════════════════════════════ */
 @media (max-width:1000px) {
-  .dash-featured  { grid-template-columns:1fr; }
-  .dash-grid-cats { grid-template-columns:repeat(2,1fr); }
-  .dash-grid-sec  { grid-template-columns:repeat(2,1fr); }
+  .dash-featured    { grid-template-columns:1fr; }
+  .dash-grid-cats   { grid-template-columns:repeat(2,1fr); }
+  .dash-grid-sec    { grid-template-columns:repeat(2,1fr); }
+  .axe-detail-grid  { grid-template-columns:1fr; }
+  .swot-grid        { grid-template-columns:1fr; }
+  .clubs-grid       { grid-template-columns:1fr; }
   .proj-grid   { grid-template-columns:repeat(2,1fr); }
   .detail-grid { grid-template-columns:1fr; }
   .admin-grid  { grid-template-columns:1fr; }
 }
 @media (max-width:640px) {
   main { padding:1rem 1rem 3rem; }
-  .dash-featured  { grid-template-columns:1fr; }
-  .dash-grid-cats { grid-template-columns:repeat(2,1fr); gap:.65rem; }
-  .dash-grid-sec  { grid-template-columns:repeat(2,1fr); gap:.65rem; }
+  .dash-featured    { grid-template-columns:1fr; }
+  .dash-grid-cats   { grid-template-columns:repeat(2,1fr); gap:.65rem; }
+  .dash-grid-sec    { grid-template-columns:repeat(2,1fr); gap:.65rem; }
+  .axe-detail-grid  { grid-template-columns:1fr; }
+  .swot-grid        { grid-template-columns:1fr; }
+  .clubs-grid       { grid-template-columns:1fr; }
   .proj-grid  { grid-template-columns:1fr; }
   .fg-row     { grid-template-columns:1fr; }
   .hero       { padding:1.5rem 1.1rem 1.3rem; }
@@ -910,6 +1059,9 @@ footer a:hover { color:var(--t0); }
   .nav-wordmark span { display:none; }
   .modal { padding:1.4rem; }
   .modal.modal-lg { max-width:100%; }
+  .pe-kpis    { gap:.5rem; }
+  .pe-kpi     { min-width:72px; padding:.55rem .75rem; }
+  .pe-kpi-n   { font-size:1.2rem; }
 }
 </style>
 </head>
@@ -1016,12 +1168,70 @@ const CATS = {
 };
 
 const AXES = [
-  {n:1, t:"Favoriser la réussite scolaire de tous les élèves et encourager l'ouverture sur le pays d'accueil",
-   s:["Accompagner les élèves","Innover en classe","Parcours éducatifs","Viser l'excellence"]},
+  {n:1, t:"Favoriser la réussite scolaire de tous les élèves selon les programmes français et encourager l'ouverture sur le pays d'accueil",
+   s:["Apprentissages fondamentaux","Culture scientifique & numérique","Ouverture sur Madagascar","Viser l'excellence"]},
   {n:2, t:"Vers une école inclusive : garantir et valoriser le bien-être de tous",
-   s:["Améliorer la vie quotidienne","Respect et tolérance","Développement durable","École inclusive"]},
-  {n:3, t:"Sentiment d'appartenance commune au LFT et attractivité",
-   s:["Promouvoir le plurilinguisme","Bien vivre ensemble","Attractivité du LFT","Coopération régionale"]},
+   s:["Inclusion et égalité des chances","Bien-être scolaire","Compétences citoyennes","École active"]},
+  {n:3, t:"Promouvoir le plurilinguisme, renforcer l'identité, l'attractivité et l'appartenance au LFT",
+   s:["Plurilinguisme & certifications","Sentiment d'appartenance","Image & attractivité","Partenariats culturels"]},
+];
+
+/* Données détaillées du Projet d'Établissement 2025-2030 */
+const AXES_FULL = [
+  {
+    title:"Favoriser la réussite scolaire de tous les élèves selon les programmes français et encourager l'ouverture sur le pays d'accueil",
+    objectifs:[
+      "Consolider les apprentissages fondamentaux",
+      "Développer la culture scientifique et numérique",
+      "Valoriser l'ouverture sur Madagascar"
+    ],
+    actions:[
+      "Renforcement des dispositifs de différenciation et d'accompagnement personnalisé",
+      "Promotion des démarches d'investigation, usage du numérique éducatif",
+      "Projets interdisciplinaires intégrant la culture et la langue malgache"
+    ],
+    indicateurs:[
+      "Résultats aux évaluations nationales et examens",
+      "Taux de validation PIX et B2i",
+      "Nombre de projets en lien avec le pays d'accueil"
+    ]
+  },
+  {
+    title:"Vers une école inclusive : garantir et valoriser le bien-être de tous",
+    objectifs:[
+      "Favoriser l'inclusion et l'égalité des chances",
+      "Renforcer le climat scolaire et la qualité de vie",
+      "Valoriser les compétences sociales et citoyennes"
+    ],
+    actions:[
+      "Adaptation des pratiques pédagogiques — élèves à besoins éducatifs particuliers",
+      "Dispositif bien-être, formation à la médiation, école active",
+      "Participation des élèves aux associations et projets solidaires"
+    ],
+    indicateurs:[
+      "Nombre de PPS, PPE, PAP mis en œuvre",
+      "Résultats des enquêtes de climat scolaire",
+      "Taux d'engagement dans les clubs et associations"
+    ]
+  },
+  {
+    title:"Promouvoir le plurilinguisme, renforcer l'identité, l'attractivité et l'appartenance au LFT",
+    objectifs:[
+      "Renforcer la maîtrise des langues vivantes",
+      "Développer le sentiment d'appartenance au LFT",
+      "Valoriser l'image et l'attractivité du lycée"
+    ],
+    actions:[
+      "Mise en œuvre des parcours plurilingues et de certifications internationales",
+      "Organisation d'événements fédérateurs, valorisation des réussites",
+      "Communication institutionnelle, partenariats culturels et éducatifs"
+    ],
+    indicateurs:[
+      "Taux de réussite aux certifications",
+      "Participation aux événements internes",
+      "Nombre de partenariats et projets médiatisés"
+    ]
+  }
 ];
 
 /* ═══════════════════════════════════════════════════════════
@@ -1265,6 +1475,12 @@ function renderDashboard(){
             <span class="hstat-num" id="hn-done">${done}</span>
             <span class="hstat-label">Terminés</span>
           </div>
+        </div>
+        <div class="hero-labels">
+          <span class="hero-label-badge">🏅 Label EFR3D Niv. 2</span>
+          <span class="hero-label-badge">🗣️ Label PARLE</span>
+          <span class="hero-label-badge">🏆 Label Génération 2024</span>
+          <span class="hero-label-badge">🌐 egd.mg</span>
         </div>
       </div>
     </section>
@@ -1743,50 +1959,167 @@ function getPhase(p,sm){
 function renderEtab(mc){
   mc.innerHTML=`
     <div class="sec-hd">
-      <div class="sec-title">🎭 Projet d'Établissement LFT 2025–2026</div>
+      <div class="sec-title">🎭 Projet d'Établissement 2025–2030</div>
       <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
     </div>
-    <div class="info-card">
-      <h2>Introduction</h2>
-      <p>Le Projet d'Établissement du Lycée Français de Tananarive définit les orientations stratégiques pour 2025-2026, articulées autour de trois axes majeurs.</p>
+
+    <!-- HERO PE -->
+    <div class="pe-hero">
+      <div class="pe-badge">Établissement en Gestion Directe · AEFE · Homologué MEN</div>
+      <h1 class="pe-title">Lycée Français de Tananarive – Ambatobe</h1>
+      <p class="pe-subtitle">Antananarivo, Madagascar · Année scolaire 2025–2030</p>
+      <div class="pe-kpis">
+        <div class="pe-kpi"><span class="pe-kpi-n">2 585</span><span class="pe-kpi-l">élèves</span></div>
+        <div class="pe-kpi"><span class="pe-kpi-n">264</span><span class="pe-kpi-l">enseignants</span></div>
+        <div class="pe-kpi"><span class="pe-kpi-n">477</span><span class="pe-kpi-l">personnels</span></div>
+        <div class="pe-kpi"><span class="pe-kpi-n">900</span><span class="pe-kpi-l">boursiers</span></div>
+        <div class="pe-kpi"><span class="pe-kpi-n">8,5 ha</span><span class="pe-kpi-l">superficie</span></div>
+        <div class="pe-kpi"><span class="pe-kpi-n">~93 %</span><span class="pe-kpi-l">réussite bac</span></div>
+      </div>
+      <div class="pe-labels">
+        <div class="pe-label"><span class="pe-label-icon">🏅</span><span>Label EFR3D<small>Niveau 2 · jan. 2025</small></span></div>
+        <div class="pe-label"><span class="pe-label-icon">🗣️</span><span>Label PARLE<small>Plurilinguisme actif</small></span></div>
+        <div class="pe-label"><span class="pe-label-icon">🏆</span><span>Label Génération 2024<small>Engagement sportif quotidien</small></span></div>
+      </div>
     </div>
-    ${AXES.map(a=>`
-    <div class="info-card">
-      <h2>Axe ${a.n}</h2>
-      <div class="axe-glass">
-        <div class="axe-num">AXE ${a.n}</div>
-        <div class="axe-ttl">${a.t}</div>
-        <div class="axe-chips">${a.s.map(s=>`<span class="axe-chip">${s}</span>`).join('')}</div>
+
+    <!-- CADRE INSTITUTIONNEL -->
+    <div class="pe-section">
+      <div class="pe-section-hd">Cadre institutionnel</div>
+      <div class="info-card">
+        <p>Le Lycée Français de Tananarive est homologué par le <strong>Ministère français de l'Éducation nationale</strong> et placé sous la tutelle de l'<strong>AEFE</strong>. Il met en œuvre les programmes français et participe à la mission de coopération éducative de la France à l'étranger.</p>
+        <p>Le projet d'établissement s'inscrit dans le cadre :</p>
+        <ul>
+          <li>Du <strong>contrat d'objectifs</strong> établi avec l'AEFE</li>
+          <li>Des <strong>orientations du Ministère</strong> de l'Éducation nationale</li>
+          <li>Du <strong>référentiel des établissements</strong> du réseau AEFE</li>
+          <li>Des <strong>priorités du poste diplomatique</strong> à Madagascar</li>
+        </ul>
+        <div style="margin-top:.9rem">
+          <a href="https://www.egd.mg" target="_blank" rel="noopener" class="btn btn-ghost" style="display:inline-flex;align-items:center;gap:.4rem">🌐 Site officiel — egd.mg</a>
+        </div>
       </div>
-      <h3>Projets liés</h3>
-      <div class="proj-grid" style="grid-template-columns:repeat(2,1fr)">
-        ${S.projects.filter(p=>p.Axe_Projet_Etablissement&&p.Axe_Projet_Etablissement.includes(String(a.n))).slice(0,4).map(p=>cardHTML(p)).join('')||`<p style="color:var(--t3);font-size:.82rem;grid-column:1/-1">Aucun projet associé.</p>`}
+    </div>
+
+    <!-- DIAGNOSTIC SWOT -->
+    <div class="pe-section">
+      <div class="pe-section-hd">Diagnostic synthétique</div>
+      <div class="swot-grid">
+        <div class="swot-card swot-forces">
+          <div class="swot-hd">💪 Forces</div>
+          <ul>
+            <li>Excellence académique</li>
+            <li>Diversité linguistique</li>
+            <li>Engagement des équipes</li>
+            <li>Climat scolaire positif</li>
+          </ul>
+        </div>
+        <div class="swot-card swot-faiblesses">
+          <div class="swot-hd">⚠️ Faiblesses</div>
+          <ul>
+            <li>Disparité de niveaux</li>
+            <li>Besoins en différenciation pédagogique</li>
+            <li>Accompagnement à renforcer</li>
+          </ul>
+        </div>
+        <div class="swot-card swot-opportunites">
+          <div class="swot-hd">🚀 Opportunités</div>
+          <ul>
+            <li>Développement du numérique éducatif</li>
+            <li>Ouverture culturelle</li>
+            <li>Partenariats locaux</li>
+          </ul>
+        </div>
+        <div class="swot-card swot-menaces">
+          <div class="swot-hd">🛡️ Menaces</div>
+          <ul>
+            <li>Contraintes économiques</li>
+            <li>Instabilités locales</li>
+            <li>Attentes accrues des familles</li>
+          </ul>
+        </div>
       </div>
-    </div>`).join('')}`;
+    </div>
+
+    <!-- 3 AXES — Politique éducative -->
+    <div class="pe-section">
+      <div class="pe-section-hd">Politique éducative et pédagogique</div>
+      ${AXES_FULL.map((a,i)=>`
+      <div class="axe-detail-card axe-d${i+1}">
+        <div class="axe-detail-header">
+          <div class="axe-num-badge">${i+1}</div>
+          <div class="axe-detail-title">${a.title}</div>
+        </div>
+        <div class="axe-detail-grid">
+          <div class="axe-col">
+            <div class="axe-col-hd">Objectifs</div>
+            <ul>${a.objectifs.map(o=>`<li>${o}</li>`).join('')}</ul>
+          </div>
+          <div class="axe-col">
+            <div class="axe-col-hd">Actions / Leviers</div>
+            <ul>${a.actions.map(o=>`<li>${o}</li>`).join('')}</ul>
+          </div>
+          <div class="axe-col">
+            <div class="axe-col-hd">Indicateurs</div>
+            <ul>${a.indicateurs.map(o=>`<li>${o}</li>`).join('')}</ul>
+          </div>
+        </div>
+        <div>
+          <div class="axe-col-hd" style="margin-bottom:.55rem">Projets liés à cet axe</div>
+          <div class="proj-grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
+            ${S.projects.filter(p=>p.Axe_Projet_Etablissement&&p.Axe_Projet_Etablissement.includes(String(i+1))).slice(0,3).map(p=>cardHTML(p)).join('')||`<p style="color:var(--t3);font-size:.8rem">Aucun projet associé à cet axe.</p>`}
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <!-- PILOTAGE -->
+    <div class="pe-section">
+      <div class="pe-section-hd">Dispositif de pilotage et évaluation</div>
+      <div class="info-card">
+        <p>Le pilotage est assuré par un <strong>comité de suivi</strong> présidé par l'équipe de direction, associant des représentants des personnels, des parents et des élèves.</p>
+        <p>Des <strong>bilans annuels</strong> mesurent les progrès et permettent d'ajuster les actions pour garantir la cohérence de la politique éducative.</p>
+        <div style="margin-top:1rem;padding:.85rem 1.1rem;background:rgba(0,83,163,.1);border-left:3px solid var(--aefe-blue);border-radius:0 var(--r-md) var(--r-md) 0">
+          <p style="font-size:.8rem;color:var(--t1);margin:0">📌 Le tableau de synthèse des actions est partagé avec les équipes pédagogiques via la plateforme interne de l'établissement.</p>
+        </div>
+        <div style="margin-top:1rem;font-size:.78rem;color:var(--t2)">
+          Source : <em>Projet d'Établissement LFT 2025-2030 v1</em> — Document officiel homologué AEFE
+        </div>
+      </div>
+    </div>`;
 }
 
 /* CLUBS */
 function renderClubs(mc){
+  const clubs=[
+    {icon:'🌍', name:'Club MUN-LFT', since:'depuis 2018', cat:'Engagement citoyen', desc:"Simulation de débats de l'ONU. Partenariat avec watersaving.mg pour sensibiliser à la préservation de l'eau."},
+    {icon:'🤝', name:'Jeunes Solidaires', since:'depuis 11 ans', cat:'Solidarité', desc:"Collecte de vêtements, recyclage papier, lutte contre le gaspillage énergétique et projets solidaires locaux."},
+    {icon:'⚽', name:'Association Sportive (UNSS)', since:'', cat:'Sport', desc:"Affiliée à l'Union Nationale du Sport Scolaire France et à la Ligue AEFE-UNSS. Environ 500 élèves engagés."},
+    {icon:'💚', name:'BASolidaire', since:'depuis 2022', cat:'Solidarité', desc:"Bénévolat des élèves du Bureau de l'AS pour soutenir des activités culturelles, solidaires et environnementales."},
+    {icon:'🎭', name:'Jeunes Talents', since:'depuis 15 ans', cat:'Arts & Culture', desc:"Valorisation des talents des élèves avec un spectacle annuel à la Cité de l'Amitié pour récolter des fonds pour le MSSC."},
+    {icon:'🎵', name:'La Chorale du LFT', since:'', cat:'Arts & Culture', desc:"Ensemble vocal ouvert à tous les niveaux de la maternelle au lycée, répétitions hebdomadaires avec participation aux événements du lycée."},
+    {icon:'📚', name:'Le Lard Géant', since:'', cat:'Solidarité', desc:"Association ATD Quart Monde — lutte contre l'illettrisme et alimentation de bibliothèques dans les quartiers défavorisés de Tananarive."},
+    {icon:'🎁', name:'Noël Pour Tous', since:'depuis 2007', cat:'Solidarité', desc:"Collecte de fonds pour offrir un Noël digne aux enfants défavorisés des quartiers voisins du lycée à Ambatobe."},
+  ];
   mc.innerHTML=`
     <div class="sec-hd">
-      <div class="sec-title">💡 Clubs &amp; Activités</div>
+      <div class="sec-title">💡 Vie Associative &amp; Clubs</div>
       <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
     </div>
     <div class="info-card">
-      <h2>Pause méridienne</h2>
-      <p>Le LFT propose des activités et clubs animés par les enseignants durant la pause méridienne, contribuant au bien-être et au développement de compétences transversales.</p>
-      <h3>Clubs actifs</h3>
-      <ul>
-        <li>Club Échecs — ouvert à tous les niveaux</li>
-        <li>Atelier Lecture — bibliothèque</li>
-        <li>Club Arts Plastiques</li>
-        <li>Atelier Théâtre &amp; Expression orale</li>
-        <li>Club Sciences &amp; Expériences</li>
-        <li>Club Informatique &amp; Code</li>
-        <li>Activités sportives supervisées</li>
-      </ul>
-      <h3>Organisation</h3>
-      <p>Du lundi au vendredi, de 12h30 à 13h30, selon le planning affiché en début de trimestre.</p>
+      <p>Le LFT dispose d'une vie associative riche et engagée, portée par les élèves avec l'appui des enseignants. Ces activités contribuent au <strong>bien-être</strong>, au développement de <strong>compétences citoyennes</strong> et à l'ouverture culturelle — au cœur de l'Axe 2 du Projet d'Établissement.</p>
+    </div>
+    <div class="clubs-grid">
+      ${clubs.map(c=>`
+      <div class="club-card glass">
+        <div class="club-icon">${c.icon}</div>
+        <div class="club-content">
+          <div class="club-name">${c.name}</div>
+          ${c.since?`<span class="club-since">${c.since}</span>`:''}
+          <p class="club-desc">${c.desc}</p>
+          <span class="tile-chip tc-muted">${c.cat}</span>
+        </div>
+      </div>`).join('')}
     </div>`;
 }
 
