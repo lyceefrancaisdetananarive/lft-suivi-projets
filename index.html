@@ -819,6 +819,55 @@ nav {
 }
 .fg textarea { resize:vertical; min-height:74px; }
 .fg-hint { font-size:.7rem; color:var(--t3); margin-top:.28rem; }
+
+/* Multi-select niveaux dropdown */
+.niv-wrap { position:relative; }
+.niv-btn {
+  width:100%; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.7);
+  color:var(--t0); border-radius:var(--r-md); padding:.52rem .85rem;
+  font-size:.85rem; outline:none; cursor:pointer; text-align:left;
+  transition:all var(--dur) var(--ease);
+  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+  min-height:38px;
+}
+.niv-btn:focus, .niv-btn.open {
+  border-color:rgba(0,83,163,.25);
+  background:rgba(255,255,255,.8);
+  box-shadow:0 0 0 4px rgba(0,83,163,.08);
+}
+.niv-btn .niv-arrow { font-size:.6rem; color:var(--t3); transition:transform .2s; flex-shrink:0; }
+.niv-btn.open .niv-arrow { transform:rotate(180deg); }
+.niv-btn-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.niv-btn-text.placeholder { color:var(--t3); }
+.niv-drop {
+  display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:rgba(255,255,255,.92); backdrop-filter:blur(20px) saturate(180%);
+  border:1px solid rgba(255,255,255,.7); border-radius:var(--r-md);
+  box-shadow:0 8px 24px rgba(0,30,80,.12); z-index:100;
+  max-height:280px; overflow-y:auto; padding:.35rem 0;
+}
+.niv-drop.show { display:block; }
+.niv-group-label {
+  font-size:.65rem; font-weight:700; color:var(--t3);
+  text-transform:uppercase; letter-spacing:.06em;
+  padding:.45rem .85rem .2rem; user-select:none;
+}
+.niv-opt {
+  display:flex; align-items:center; gap:.5rem;
+  padding:.32rem .85rem; cursor:pointer; font-size:.82rem; color:var(--t0);
+  transition:background .15s;
+}
+.niv-opt:hover { background:rgba(0,83,163,.06); }
+.niv-opt input[type="checkbox"] {
+  accent-color:var(--aefe-blue); width:15px; height:15px;
+  cursor:pointer; flex-shrink:0;
+}
+.niv-opt.all-opt { border-bottom:1px solid rgba(0,0,0,.06); padding-bottom:.45rem; margin-bottom:.2rem; font-weight:600; }
+.niv-tags { display:flex; flex-wrap:wrap; gap:.25rem; margin-top:.35rem; }
+.niv-tag {
+  font-size:.68rem; background:rgba(0,83,163,.08); color:var(--aefe-blue);
+  padding:.15rem .45rem; border-radius:20px; font-weight:500;
+}
 .fg-row { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; }
 
 .msg-err {
@@ -1929,7 +1978,37 @@ function renderForm(p){
       <div class="fg"><label>Disciplines mobilisées</label>
         <input type="text" id="f-dis" value="${p?esc(p.Disciplines_Mobilisees||''):''}"></div>
       <div class="fg"><label>Niveaux concernés</label>
-        <input type="text" id="f-niv" value="${p?esc(p.Niveaux_Concernes||''):''}"></div>
+        <div class="niv-wrap" id="f-niv-wrap">
+          <button type="button" class="niv-btn" id="f-niv-btn" onclick="toggleNivDrop()">
+            <span class="niv-btn-text placeholder" id="f-niv-text">Sélectionner les niveaux...</span>
+            <span class="niv-arrow">▼</span>
+          </button>
+          <div class="niv-drop" id="f-niv-drop">
+            <label class="niv-opt all-opt"><input type="checkbox" id="niv-all" onchange="nivToggleAll(this)"> Tous niveaux</label>
+            <div class="niv-group-label">Primaire</div>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="CP" onchange="nivUpdate()"> CP</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="CE1" onchange="nivUpdate()"> CE1</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="CE2" onchange="nivUpdate()"> CE2</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="CM1" onchange="nivUpdate()"> CM1</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="CM2" onchange="nivUpdate()"> CM2</label>
+            <div class="niv-group-label">Collège</div>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="6ème" onchange="nivUpdate()"> 6ème</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="5ème" onchange="nivUpdate()"> 5ème</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="4ème" onchange="nivUpdate()"> 4ème</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="3ème" onchange="nivUpdate()"> 3ème</label>
+            <div class="niv-group-label">Lycée Général & Technologique</div>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="2nde" onchange="nivUpdate()"> 2nde</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="1ère Générale" onchange="nivUpdate()"> 1ère Générale</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="1ère STMG" onchange="nivUpdate()"> 1ère STMG</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="Terminale Générale" onchange="nivUpdate()"> Terminale Générale</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="Terminale STMG" onchange="nivUpdate()"> Terminale STMG</label>
+            <div class="niv-group-label">Lycée Professionnel</div>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="2nde Pro" onchange="nivUpdate()"> 2nde Pro</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="1ère Pro" onchange="nivUpdate()"> 1ère Pro</label>
+            <label class="niv-opt"><input type="checkbox" class="niv-cb" value="Terminale Pro" onchange="nivUpdate()"> Terminale Pro</label>
+          </div>
+          <input type="hidden" id="f-niv">
+        </div></div>
     </div>
     <div class="fg-row">
       <div class="fg"><label>Échelle</label>
@@ -1953,12 +2032,104 @@ function renderForm(p){
       onclick="${ed?`doUpdate('${p.ID_Projet}')`:'doAdd()'}">${ed?'💾 Enregistrer':'✅ Créer le projet'}</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="closeForm()">Annuler</button>`;
   if(p&&p.Axe_Projet_Etablissement) updAxeHint();
+  nivSetFromString(p?p.Niveaux_Concernes||'':'');
 }
 
 function updAxeHint(){
   const n=(v('f-axe').match(/\d/)||[])[0];
   const ax=AXES.find(a=>String(a.n)===n);
   document.getElementById('axe-hint').textContent=ax?ax.t:'';
+}
+
+/* --- Niveaux multi-select dropdown --- */
+function toggleNivDrop(){
+  const btn=document.getElementById('f-niv-btn');
+  const drop=document.getElementById('f-niv-drop');
+  const open=drop.classList.toggle('show');
+  btn.classList.toggle('open',open);
+}
+// Close dropdown when clicking outside
+document.addEventListener('click',function(e){
+  const wrap=document.getElementById('f-niv-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    document.getElementById('f-niv-drop')?.classList.remove('show');
+    document.getElementById('f-niv-btn')?.classList.remove('open');
+  }
+});
+function nivToggleAll(cb){
+  const checked=cb.checked;
+  document.querySelectorAll('.niv-cb').forEach(c=>c.checked=checked);
+  nivUpdate();
+}
+function nivUpdate(){
+  const cbs=document.querySelectorAll('.niv-cb');
+  const sel=[]; cbs.forEach(c=>{ if(c.checked) sel.push(c.value); });
+  const allCb=document.getElementById('niv-all');
+  allCb.checked=sel.length===cbs.length;
+  const txt=document.getElementById('f-niv-text');
+  const hidden=document.getElementById('f-niv');
+  if(allCb.checked){
+    txt.textContent='Tous niveaux';
+    txt.classList.remove('placeholder');
+    hidden.value='Tous niveaux';
+  } else if(sel.length===0){
+    txt.textContent='Sélectionner les niveaux...';
+    txt.classList.add('placeholder');
+    hidden.value='';
+  } else if(sel.length<=3){
+    txt.textContent=sel.join(', ');
+    txt.classList.remove('placeholder');
+    hidden.value=sel.join(', ');
+  } else {
+    txt.textContent=sel.length+' niveaux sélectionnés';
+    txt.classList.remove('placeholder');
+    hidden.value=sel.join(', ');
+  }
+}
+function nivSetFromString(s){
+  // Reset all checkboxes
+  document.querySelectorAll('.niv-cb').forEach(c=>c.checked=false);
+  document.getElementById('niv-all').checked=false;
+  if(!s) { nivUpdate(); return; }
+  const str=s.trim().toLowerCase();
+  if(str==='tous niveaux' || str==='tous'){
+    document.getElementById('niv-all').checked=true;
+    document.querySelectorAll('.niv-cb').forEach(c=>c.checked=true);
+    nivUpdate(); return;
+  }
+  // Alias map: normalized key → checkbox value
+  const ALIAS={
+    'cp':'CP','ce1':'CE1','ce2':'CE2','cm1':'CM1','cm2':'CM2',
+    '6ème':'6ème','6eme':'6ème','sixième':'6ème','sixieme':'6ème','6e':'6ème',
+    '5ème':'5ème','5eme':'5ème','cinquième':'5ème','cinquieme':'5ème','5e':'5ème',
+    '4ème':'4ème','4eme':'4ème','quatrième':'4ème','quatrieme':'4ème','4e':'4ème',
+    '3ème':'3ème','3eme':'3ème','troisième':'3ème','troisieme':'3ème','3e':'3ème',
+    '2nde':'2nde','2de':'2nde','seconde':'2nde','seconde gt':'2nde',
+    '2nde pro':'2nde Pro','seconde pro':'2nde Pro','seconde professionnelle':'2nde Pro',
+    '1ère générale':'1ère Générale','1ere generale':'1ère Générale','1ère':'1ère Générale','1ere':'1ère Générale','première générale':'1ère Générale','premiere generale':'1ère Générale','première':'1ère Générale','premiere':'1ère Générale',
+    '1ère stmg':'1ère STMG','1ere stmg':'1ère STMG','première stmg':'1ère STMG',
+    '1ère pro':'1ère Pro','1ere pro':'1ère Pro','première pro':'1ère Pro','première professionnelle':'1ère Pro',
+    'terminale générale':'Terminale Générale','terminale generale':'Terminale Générale','terminale':'Terminale Générale','tle générale':'Terminale Générale','tle generale':'Terminale Générale',
+    'terminale stmg':'Terminale STMG','tle stmg':'Terminale STMG',
+    'terminale pro':'Terminale Pro','tle pro':'Terminale Pro','terminale professionnelle':'Terminale Pro',
+  };
+  // Build reverse set of checkbox values
+  const cbMap=new Map();
+  document.querySelectorAll('.niv-cb').forEach(c=>cbMap.set(c.value,c));
+  // Parse comma-separated values and match
+  const parts=s.split(',').map(x=>x.trim()).filter(Boolean);
+  parts.forEach(p=>{
+    const pl=p.toLowerCase();
+    // 1) Exact match on checkbox value
+    const exactCb=cbMap.get(p) || cbMap.get(p.charAt(0).toUpperCase()+p.slice(1));
+    if(exactCb){ exactCb.checked=true; return; }
+    // 2) Alias lookup
+    const mapped=ALIAS[pl];
+    if(mapped && cbMap.has(mapped)){ cbMap.get(mapped).checked=true; return; }
+    // 3) Try direct case-insensitive match
+    cbMap.forEach((cb,val)=>{ if(val.toLowerCase()===pl) cb.checked=true; });
+  });
+  nivUpdate();
 }
 
 function getFormData(){
