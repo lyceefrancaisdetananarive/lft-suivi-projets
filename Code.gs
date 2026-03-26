@@ -12,9 +12,10 @@
  * - "Logs"            (5 colonnes : Date_Heure, Email, Role, Action, Detail)
  *
  * ROLES :
- * - admin      : CRUD projets + gestion utilisateurs + logs
- * - direction  : CRUD projets uniquement (sans gestion utilisateurs)
- * - enseignant : crée et modifie SES projets uniquement (pas de suppression)
+ * - admin        : CRUD projets + gestion utilisateurs + logs
+ * - direction    : CRUD projets uniquement (sans gestion utilisateurs)
+ * - vie_scolaire : CRUD uniquement dans la categorie "Clubs et activités"
+ * - enseignant   : crée et modifie SES projets uniquement (pas de suppression)
  *
  * Apres deploiement, mettre a jour APP_URL avec l'URL GitHub Pages.
  */
@@ -66,8 +67,11 @@ function authenticate(email, password) {
 
 function isAdmin(user)            { return user && user.role === 'admin'; }
 function isDirection(user)        { return user && user.role === 'direction'; }
+function isVieScolaire(user)      { return user && user.role === 'vie_scolaire'; }
 function isAdminOrDirection(user) { return user && (user.role === 'admin' || user.role === 'direction'); }
-function canDeleteProject(user)   { return isAdminOrDirection(user); }
+function canDeleteProject(user)   { return isAdminOrDirection(user) || isVieScolaire(user); }
+
+var VIE_SCOLAIRE_CAT = 'Clubs et activités';
 
 function isEmailAuthorized(email) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMAILS_SHEET);
@@ -97,6 +101,7 @@ function generateProjectId(categorie) {
   if (categorie && categorie.includes('AEFE'))          prefix = 'AEFE';
   else if (categorie && categorie.includes('Zone'))     prefix = 'ZOI';
   else if (categorie && categorie.includes('institution')) prefix = 'INST';
+  else if (categorie && categorie.includes('Clubs'))    prefix = 'CLUB';
   else if (categorie && categorie.includes('Internat')) prefix = 'INT';
   let maxNum = 0;
   for (let i = 1; i < data.length; i++) {
@@ -367,7 +372,7 @@ function handleChangeRole(e) {
   const targetEmail = (body.email || '').trim().toLowerCase();
   const newRole     = (body.role  || '').trim().toLowerCase();
 
-  if (!['admin', 'direction', 'enseignant'].includes(newRole)) {
+  if (!['admin', 'direction', 'vie_scolaire', 'enseignant'].includes(newRole)) {
     return jsonResponse({ success: false, error: 'Role invalide' });
   }
   if (targetEmail === e.parameter.email.trim().toLowerCase()) {
@@ -506,6 +511,10 @@ function handleAdd(e) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
   if (table === PROJETS_SHEET) {
+    // Vie scolaire : uniquement dans la categorie Clubs et activites
+    if (isVieScolaire(user) && body['Categorie'] !== VIE_SCOLAIRE_CAT) {
+      return jsonResponse({ success: false, error: 'Vie scolaire : vous ne pouvez creer que dans la categorie "' + VIE_SCOLAIRE_CAT + '"' });
+    }
     body['ID_Projet']  = generateProjectId(body['Categorie']);
     body['Created_By'] = e.parameter.email;
     addLog(e.parameter.email, user.role, 'add_project', 'Nouveau projet: ' + (body['Nom_Projet'] || '') + ' (' + body['ID_Projet'] + ')');
@@ -541,12 +550,19 @@ function handleUpdate(e) {
   const idIdx        = headers.indexOf('ID_Projet');
   const createdByIdx = headers.indexOf('Created_By');
 
+  const catIdx = headers.indexOf('Categorie');
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][idIdx] === body['ID_Projet']) {
       const owner = data[i][createdByIdx];
+      const projectCat = data[i][catIdx] ? data[i][catIdx].toString() : '';
+      // Vie scolaire : uniquement categorie Clubs et activites
+      if (isVieScolaire(user) && projectCat !== VIE_SCOLAIRE_CAT) {
+        return jsonResponse({ success: false, error: 'Vie scolaire : modification limitee a la categorie "' + VIE_SCOLAIRE_CAT + '"' });
+      }
       // Admin et Direction peuvent modifier n'importe quel projet
       // Enseignant : seulement ses propres projets
-      if (!isAdminOrDirection(user) && owner !== e.parameter.email) {
+      if (!isAdminOrDirection(user) && !isVieScolaire(user) && owner !== e.parameter.email) {
         return jsonResponse({ success: false, error: 'Vous ne pouvez modifier que vos propres projets' });
       }
       for (let j = 0; j < headers.length; j++) {
@@ -583,8 +599,13 @@ function handleDelete(e) {
     const targetId  = e.parameter.id;
     const idIdx     = headers.indexOf('ID_Projet');
     const nomIdx    = headers.indexOf('Nom_Projet');
+    const catIdx    = headers.indexOf('Categorie');
     for (let i = 1; i < data.length; i++) {
       if (data[i][idIdx] === targetId) {
+        // Vie scolaire : suppression limitee a Clubs et activites
+        if (isVieScolaire(user) && data[i][catIdx] !== VIE_SCOLAIRE_CAT) {
+          return jsonResponse({ success: false, error: 'Vie scolaire : suppression limitee a la categorie "' + VIE_SCOLAIRE_CAT + '"' });
+        }
         const nomProjet = data[i][nomIdx] || targetId;
         sheet.deleteRow(i + 1);
         addLog(e.parameter.email, user.role, 'delete_project', 'Suppression: ' + targetId + ' - ' + nomProjet);
