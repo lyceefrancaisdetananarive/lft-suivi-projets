@@ -7,6 +7,9 @@
 <link rel="icon" type="image/jpeg" href="logo-lft.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/light/style.css">
 <style>
 /* ── Marianne (self-hosted) ── */
 @font-face { font-family:'Marianne'; src:url('fonts/Marianne-Light.woff2') format('woff2'); font-weight:300; font-style:normal; font-display:swap; }
@@ -535,21 +538,24 @@ nav {
   box-shadow:0 12px 40px rgba(0,83,163,.5), 0 0 0 1px rgba(255,255,255,.2);
 }
 
-.tile-icon { font-size:1.5rem; line-height:1; margin-bottom:.1rem; position:relative; z-index:2; }
+.tile-icon { font-size:1.3rem; line-height:1; margin-bottom:.2rem; position:relative; z-index:2; color:var(--aefe-blue); }
+.tile-icon i { vertical-align:middle; }
+.tile-accent .tile-icon { color:rgba(255,255,255,.9); }
 .dash-tile .tile-watermark {
   position:absolute;
-  right:-8px; top:50%; transform:translateY(-50%);
-  font-size:6.5rem; line-height:1;
-  opacity:.07;
+  right:12px; top:50%; transform:translateY(-50%);
+  font-size:5rem; line-height:1;
+  opacity:.06;
   pointer-events:none;
   z-index:0;
-  filter:grayscale(80%);
+  color:var(--aefe-blue);
   user-select:none;
-  transition:opacity var(--dur) var(--ease);
+  transition:opacity var(--dur) var(--ease), color var(--dur) var(--ease);
 }
+.dash-tile .tile-watermark i { font-size:inherit; }
 .dash-tile:hover .tile-watermark { opacity:.12; }
-.tile-accent .tile-watermark { opacity:.10; filter:grayscale(0%) brightness(10); }
-.tile-accent:hover .tile-watermark { opacity:.18; }
+.tile-accent .tile-watermark { opacity:.12; color:rgba(255,255,255,.95); }
+.tile-accent:hover .tile-watermark { opacity:.2; }
 .tile-help .tile-watermark { display:none; }
 .tile-name {
   font-family:'Spectral',Georgia,serif;
@@ -1282,7 +1288,7 @@ footer a:hover { color:var(--aefe-magenta); }
   .nav-inner  { height:64px; }
   .nav-logo-aefe { height:38px; padding:3px 6px; }
   .nav-wordmark strong { font-size:.85rem; }
-  .dash-tile .tile-watermark { font-size:4.5rem; right:-4px; }
+  .dash-tile .tile-watermark { font-size:3.5rem; right:8px; }
   .hstat-num  { font-size:1.4rem; }
   .hero-stats { gap:.5rem; }
   .hstat      { padding:.65rem .9rem; min-width:80px; }
@@ -1325,7 +1331,7 @@ footer a:hover { color:var(--aefe-magenta); }
         <span id="user-name-nav"></span>
         <span class="pill-role" id="user-role-nav"></span>
       </div>
-      <button class="btn btn-login" id="btn-login" onclick="openLogin()">🔒 Connexion</button>
+      <button class="btn btn-login" id="btn-login" onclick="openLogin()"><i class="ph-bold ph-sign-in"></i> Connexion</button>
       <button class="btn btn-ghost" id="btn-logout" style="display:none" onclick="doLogout()">Déconnexion</button>
     </div>
   </div>
@@ -1392,11 +1398,11 @@ const SCHOOL_MONTHS = [
 ];
 
 const CATS = {
-  'Projet LFT':            {emoji:'📊', cb:'cb-lft',  tc:'tc-lft',  ring:'.22rem solid var(--cat-lft)'},
-  'Projet Zone OI':        {emoji:'🌊', cb:'cb-zone', tc:'tc-zone', ring:'.22rem solid var(--cat-zone)'},
-  'Projet AEFE':           {emoji:'🌍', cb:'cb-aefe', tc:'tc-aefe', ring:'.22rem solid var(--cat-aefe)'},
-  'Projet institutionnel': {emoji:'🏛️', cb:'cb-inst', tc:'tc-inst', ring:'.22rem solid var(--cat-inst)'},
-  'Clubs et activités':    {emoji:'💡', cb:'cb-clubs', tc:'tc-clubs', ring:'.22rem solid var(--cat-clubs)'},
+  'Projet LFT':            {icon:'ph-flag-banner', cb:'cb-lft',  tc:'tc-lft',  ring:'.22rem solid var(--cat-lft)'},
+  'Projet Zone OI':        {icon:'ph-compass',     cb:'cb-zone', tc:'tc-zone', ring:'.22rem solid var(--cat-zone)'},
+  'Projet AEFE':           {icon:'ph-globe-hemisphere-west', cb:'cb-aefe', tc:'tc-aefe', ring:'.22rem solid var(--cat-aefe)'},
+  'Projet institutionnel': {icon:'ph-bank',        cb:'cb-inst', tc:'tc-inst', ring:'.22rem solid var(--cat-inst)'},
+  'Clubs et activités':    {icon:'ph-trophy',      cb:'cb-clubs', tc:'tc-clubs', ring:'.22rem solid var(--cat-clubs)'},
 };
 
 const AXES = [
@@ -1705,7 +1711,7 @@ function closeConfirm(){ document.getElementById('confirm-ov').style.display='no
 function openLogin(){
   document.getElementById('auth-ov').classList.add('open');
   document.getElementById('auth-body').innerHTML=`
-    <h2>🔒 Connexion</h2>
+    <h2><i class="ph-bold ph-sign-in"></i> Connexion</h2>
     <div class="msg-err" id="ae"></div>
     <div class="fg"><label>Adresse email</label>
       <input type="email" id="a-em" placeholder="prenom.nom@egd.mg" autocomplete="username"></div>
@@ -1719,7 +1725,7 @@ function openLogin(){
 }
 function openRegister(){
   document.getElementById('auth-body').innerHTML=`
-    <h2>✏️ Créer un compte</h2>
+    <h2><i class="ph ph-user-plus" style="vertical-align:middle"></i> Créer un compte</h2>
     <div class="msg-info">Votre adresse @egd.mg doit être pré-autorisée par l'administrateur.<br>Un mot de passe provisoire vous sera attribué automatiquement.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div id="reg-fields">
@@ -1734,7 +1740,7 @@ function openRegister(){
 }
 function openForgot(){
   document.getElementById('auth-body').innerHTML=`
-    <h2>🔑 Mot de passe oublié</h2>
+    <h2><i class="ph ph-key" style="vertical-align:middle"></i> Mot de passe oublié</h2>
     <div class="msg-info">Saisissez votre adresse @egd.mg. Vous recevrez un lien de réinitialisation valable 24 h.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Email @egd.mg</label>
@@ -1745,7 +1751,7 @@ function openForgot(){
 function openResetForm(token){
   document.getElementById('auth-ov').classList.add('open');
   document.getElementById('auth-body').innerHTML=`
-    <h2>🔑 Nouveau mot de passe</h2>
+    <h2><i class="ph ph-key" style="vertical-align:middle"></i> Nouveau mot de passe</h2>
     <div class="msg-info">Choisissez un nouveau mot de passe (min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre).</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
@@ -1778,7 +1784,7 @@ async function doLogin(){
 /* Première connexion : changement de mot de passe obligatoire (style Pronote) */
 function openForceChangePassword(email,oldPw,userInfo){
   document.getElementById('auth-body').innerHTML=`
-    <h2>🔐 Première connexion</h2>
+    <h2><i class="ph ph-lock-key" style="vertical-align:middle"></i> Première connexion</h2>
     <div class="msg-info">Bienvenue <strong>${userInfo.prenom||''} ${userInfo.nom||''}</strong> !<br>Pour des raisons de sécurité, vous devez choisir un nouveau mot de passe personnel.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
@@ -1920,7 +1926,7 @@ function renderDashboard(){
     <div class="sec-hd">
       <div class="sec-title">Catégories de projets</div>
       <div class="sec-actions">
-        ${isAdDir?`<a class="btn btn-back" href="${API_URL}?action=export" target="_blank" style="text-decoration:none">📥 Exporter CSV</a>`:''}
+        ${isAdDir?`<a class="btn btn-back" href="${API_URL}?action=export" target="_blank" style="text-decoration:none"><i class="ph ph-download-simple"></i> Exporter CSV</a>`:''}
         ${S.user?`<button class="btn btn-add" onclick="openAddForm()">+ Nouveau projet</button>`:''}
       </div>
     </div>
@@ -1928,8 +1934,8 @@ function renderDashboard(){
     <!-- LIGNE 1 : Projet d'Établissement (vedette 2/3) + Chronologie (1/3) -->
     <div class="dash-featured">
       <div class="dash-tile tile-accent tile-featured" onclick="showPage('etab')">
-        <div class="tile-watermark">🎭</div>
-        <div class="tile-icon">🎭</div>
+        <div class="tile-watermark"><i class="ph-light ph-graduation-cap"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-graduation-cap"></i></div>
         <div class="tile-name">Projet d'Établissement</div>
         <p class="tile-desc">Document stratégique LFT · 3 axes pédagogiques · 2025–2030</p>
         <div class="tile-chips">
@@ -1939,8 +1945,8 @@ function renderDashboard(){
         </div>
       </div>
       <div class="dash-tile tile-glass" onclick="showPage('chronologie')">
-        <div class="tile-watermark">📅</div>
-        <div class="tile-icon">📅</div>
+        <div class="tile-watermark"><i class="ph-light ph-calendar-dots"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-calendar-dots"></i></div>
         <div class="tile-name">Suivi Chronologique</div>
         <p class="tile-desc">Calendrier des projets et événements de l'année scolaire</p>
         <span class="tile-chip tc-white">Sept. 2025 → Juin 2026</span>
@@ -1950,29 +1956,29 @@ function renderDashboard(){
     <!-- LIGNE 2 : 4 catégories de projets -->
     <div class="dash-grid-cats">
       <div class="dash-tile tile-glass" onclick="goCategory('Projet LFT')">
-        <div class="tile-watermark">📊</div>
-        <div class="tile-icon">📊</div>
+        <div class="tile-watermark"><i class="ph-light ph-flag-banner"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-flag-banner"></i></div>
         <div class="tile-name">Projets LFT</div>
         <p class="tile-desc">Initiatives portées par l'établissement</p>
         <span class="tile-chip tc-lft">${cnt['Projet LFT']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet Zone OI')">
-        <div class="tile-watermark">🌊</div>
-        <div class="tile-icon">🌊</div>
+        <div class="tile-watermark"><i class="ph-light ph-compass"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-compass"></i></div>
         <div class="tile-name">Zone Océan Indien</div>
         <p class="tile-desc">Coopérations régionales AEFE</p>
         <span class="tile-chip tc-zone">${cnt['Projet Zone OI']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet AEFE')">
-        <div class="tile-watermark">🌍</div>
-        <div class="tile-icon">🌍</div>
+        <div class="tile-watermark"><i class="ph-light ph-globe-hemisphere-west"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-globe-hemisphere-west"></i></div>
         <div class="tile-name">Projets AEFE</div>
         <p class="tile-desc">Programmes du réseau mondial</p>
         <span class="tile-chip tc-aefe">${cnt['Projet AEFE']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet institutionnel')">
-        <div class="tile-watermark">🏛️</div>
-        <div class="tile-icon">🏛️</div>
+        <div class="tile-watermark"><i class="ph-light ph-bank"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-bank"></i></div>
         <div class="tile-name">Projets Institutionnels</div>
         <p class="tile-desc">Partenariats et cadre réglementaire</p>
         <span class="tile-chip tc-inst">${cnt['Projet institutionnel']} projets</span>
@@ -1982,23 +1988,23 @@ function renderDashboard(){
     <!-- LIGNE 3 : Vie scolaire + Admin (si admin) -->
     <div class="dash-grid-sec">
       <div class="dash-tile tile-glass" onclick="showPage('clubs')">
-        <div class="tile-watermark">💡</div>
-        <div class="tile-icon">💡</div>
+        <div class="tile-watermark"><i class="ph-light ph-trophy"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-trophy"></i></div>
         <div class="tile-name">Clubs &amp; Activités</div>
         <p class="tile-desc">Activités périscolaires et pause méridienne</p>
         <span class="tile-chip tc-clubs">${cnt['Clubs et activités']||0} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="showPage('internat')">
-        <div class="tile-watermark">🏠</div>
-        <div class="tile-icon">🏠</div>
+        <div class="tile-watermark"><i class="ph-light ph-house-line"></i></div>
+        <div class="tile-icon"><i class="ph-bold ph-house-line"></i></div>
         <div class="tile-name">Projets de l'Internat</div>
         <p class="tile-desc">Accompagnement et vie en résidence</p>
         <span class="tile-chip tc-muted">Vie scolaire</span>
       </div>
       ${isAdmin
         ? `<div class="dash-tile tile-glass" onclick="showPage('admin')">
-            <div class="tile-watermark">⚙️</div>
-            <div class="tile-icon">⚙️</div>
+            <div class="tile-watermark"><i class="ph-light ph-gear-six"></i></div>
+            <div class="tile-icon"><i class="ph-bold ph-gear-six"></i></div>
             <div class="tile-name">Administration</div>
             <p class="tile-desc">Gestion des comptes utilisateurs et accès</p>
             <span class="tile-chip tc-muted">Comptes &amp; emails</span>
@@ -2006,8 +2012,8 @@ function renderDashboard(){
         : ''}
       ${isAdDir
         ? `<div class="dash-tile tile-glass tile-trash" onclick="showPage('trash')">
-            <div class="tile-watermark">🗑️</div>
-            <div class="tile-icon">🗑️</div>
+            <div class="tile-watermark"><i class="ph-light ph-trash"></i></div>
+            <div class="tile-icon"><i class="ph-bold ph-trash"></i></div>
             <div class="tile-name">Corbeille</div>
             <p class="tile-desc">Projets supprimés en attente de restauration</p>
             <span class="tile-chip tc-muted">${S.trashCount} projet${S.trashCount>1?'s':''}</span>
@@ -2017,7 +2023,7 @@ function renderDashboard(){
 
     <!-- Aide & Tutoriels — barre compacte et discrète en bas -->
     <div class="dash-tile tile-glass tile-muted tile-help dash-help-bar" onclick="showPage('tutoriel')">
-      <div class="tile-icon">📖</div>
+      <div class="tile-icon"><i class="ph-bold ph-book-open-text"></i></div>
       <div class="tile-name">Aide &amp; Tutoriels</div>
       <span class="tile-chip tc-muted" style="margin-left:auto">Documentation</span>
     </div>`;
@@ -2037,7 +2043,7 @@ function renderCatPage(cat){
   const info=CATS[cat]||{emoji:'📋'};
   mc.innerHTML=`
     <div class="sec-hd">
-      <div class="sec-title">${info.emoji} ${cat}</div>
+      <div class="sec-title"><i class="ph-bold ${info.icon}" style="vertical-align:middle;margin-right:.3rem"></i> ${cat}</div>
       <div class="sec-actions">
         ${S.user?`<button class="btn btn-add" onclick="openAddForm()">+ Ajouter</button>`:''}
         <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
@@ -2289,7 +2295,7 @@ async function loadTrashCount(){
 function renderTrash(mc){
   mc.innerHTML=`
     <div class="sec-hd">
-      <div class="sec-title">🗑️ Corbeille</div>
+      <div class="sec-title"><i class="ph-bold ph-trash" style="vertical-align:middle;margin-right:.3rem"></i> Corbeille</div>
       <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
     </div>
     <div id="trash-list" class="trash-list"><div class="loader"><div class="spin"></div> Chargement…</div></div>`;
@@ -2358,7 +2364,7 @@ function renderForm(p){
   const axOpts=AXES.map(a=>`<option value="Axe ${a.n}" ${p&&(p.Axe_Projet_Etablissement||'').includes(String(a.n))?'selected':''}>Axe ${a.n} — ${a.t.slice(0,52)}…</option>`).join('');
   const catOpts=Object.keys(CATS).map(c=>`<option value="${c}" ${p&&p.Categorie===c?'selected':''}>${c}</option>`).join('');
   document.getElementById('form-body').innerHTML=`
-    <h2>${ed?'✏️ Modifier le projet':'➕ Nouveau projet'}</h2>
+    <h2>${ed?'<i class="ph ph-pencil-simple" style="vertical-align:middle"></i> Modifier le projet':'<i class="ph ph-plus-circle" style="vertical-align:middle"></i> Nouveau projet'}</h2>
     <div class="msg-err" id="fe"></div>
     <div class="msg-info" style="font-size:.73rem;padding:.4rem .7rem">
       Le statut (Planifié / En cours / Terminé) est calculé automatiquement selon les dates.
@@ -2865,7 +2871,7 @@ function renderInternat(mc){
 /* ADMIN */
 async function renderAdmin(mc){
   if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
-  mc.innerHTML=`<div class="sec-hd"><div class="sec-title">⚙️ Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
+  mc.innerHTML=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
   try {
     const [ud,ed,ld]=await Promise.all([
       apiGet({action:'list',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')}),
@@ -2877,10 +2883,10 @@ async function renderAdmin(mc){
     const logs=ld.success?ld.data||[]:[];
     const roleTag=(r)=>`<span class="role-tag ${r==='admin'?'rt-admin':r==='direction'?'rt-dir':r==='vie_scolaire'?'rt-vs':'rt-teacher'}">${r==='vie_scolaire'?'vie scolaire':r||'enseignant'}</span>`;
     mc.innerHTML=`
-      <div class="sec-hd"><div class="sec-title">⚙️ Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
+      <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
       <div class="admin-grid">
         <div class="admin-card">
-          <div class="admin-card-hd">👥 Utilisateurs <small>${us.length} comptes</small></div>
+          <div class="admin-card-hd"><i class="ph ph-users-three" style="margin-right:.3rem"></i> Utilisateurs <small>${us.length} comptes</small></div>
           ${us.map(u=>{
             const isSelf=u.Email===(S.user&&S.user.email);
             const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.Role?'selected':''}>${r==='vie_scolaire'?'vie scolaire':r}</option>`).join('');
@@ -2900,7 +2906,7 @@ async function renderAdmin(mc){
               </div>
             </div>`;
           }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
-          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">➕ Créer un compte <small style="color:var(--t3);font-weight:400">mot de passe auto-généré</small></div>
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-user-plus" style="margin-right:.2rem"></i> Créer un compte <small style="color:var(--t3);font-weight:400">mot de passe auto-généré</small></div>
           <div class="fg-row" style="gap:.5rem;margin-top:.45rem">
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Prénom</label><input class="admin-input" type="text" id="nu-pn" placeholder="Jean"></div>
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Nom</label><input class="admin-input" type="text" id="nu-nm" placeholder="DUPONT"></div>
@@ -2919,7 +2925,7 @@ async function renderAdmin(mc){
           <button class="btn-xs bx-add" onclick="addUser()" style="width:100%;margin-top:.4rem">Créer l'utilisateur</button>
         </div>
         <div class="admin-card">
-          <div class="admin-card-hd">✉️ Emails autorisés <small>${em.length} adresses</small></div>
+          <div class="admin-card-hd"><i class="ph ph-envelope-simple" style="margin-right:.2rem"></i> Emails autorisés <small>${em.length} adresses</small></div>
           <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'auto-inscrire.</p>
           ${em.map(e=>`<div class="row-item">
             <span style="font-size:.82rem;color:var(--t1)">${e.Email||e}</span>
@@ -2929,7 +2935,7 @@ async function renderAdmin(mc){
             <input class="admin-input" type="email" id="new-em" placeholder="prenom.nom@egd.mg">
             <button class="btn-xs bx-add" onclick="addEmail()">Ajouter</button>
           </div>
-          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">📊 Statistiques</div>
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-chart-bar" style="margin-right:.2rem"></i> Statistiques</div>
           <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.5rem">
             ${Object.entries(CATS).map(([cat,i])=>{
               const cnt=S.projects.filter(p=>p.Categorie===cat).length;
@@ -2939,7 +2945,7 @@ async function renderAdmin(mc){
           </div>
         </div>
         <div class="admin-card full">
-          <div class="admin-card-hd">🗒️ Journal d'activité <small>${logs.length} entrées</small></div>
+          <div class="admin-card-hd"><i class="ph ph-clipboard-text" style="margin-right:.2rem"></i> Journal d'activité <small>${logs.length} entrées</small></div>
           <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:.73rem">
               <thead><tr style="color:var(--t3)">
@@ -3020,10 +3026,10 @@ async function delEmail(email){
 /* TUTORIEL */
 function renderTutoriel(mc){
   mc.innerHTML=`
-    <div class="sec-hd"><div class="sec-title">📖 Aide &amp; Tutoriels</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
+    <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-book-open-text" style="vertical-align:middle;margin-right:.3rem"></i> Aide &amp; Tutoriels</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
     <div class="info-card"><h2>Créer un compte</h2><ul>
       <li>Demandez à l'administrateur d'autoriser votre adresse @egd.mg</li>
-      <li>Cliquez sur <strong>🔒 Connexion</strong> → <em>Créer un compte</em></li>
+      <li>Cliquez sur <strong><i class="ph-bold ph-sign-in"></i> Connexion</strong> → <em>Créer un compte</em></li>
       <li>Renseignez vos prénom, nom et email — un mot de passe provisoire sera généré automatiquement</li>
       <li><strong>Notez bien</strong> ce mot de passe provisoire, il ne sera affiché qu'une seule fois</li>
       <li>Lors de votre première connexion, vous serez invité(e) à choisir un mot de passe personnel (min. 8 car., 1 majuscule, 1 minuscule, 1 chiffre)</li>
@@ -3040,7 +3046,7 @@ function renderTutoriel(mc){
       <li><strong>Administrateur :</strong> accès complet — projets, comptes utilisateurs, emails autorisés, journal d'activité</li>
     </ul></div>
     <div class="info-card"><h2>Mot de passe oublié</h2><ul>
-      <li>Cliquez sur <strong>🔒 Connexion</strong> → <em>Mot de passe oublié ?</em></li>
+      <li>Cliquez sur <strong><i class="ph-bold ph-sign-in"></i> Connexion</strong> → <em>Mot de passe oublié ?</em></li>
       <li>Renseignez votre adresse @egd.mg</li>
       <li>Vous recevrez un lien de réinitialisation valable 24 heures</li>
     </ul></div>`;
@@ -3049,7 +3055,7 @@ function renderTutoriel(mc){
 /* MENTIONS */
 function renderMentions(mc){
   mc.innerHTML=`
-    <div class="sec-hd"><div class="sec-title">⚖️ Mentions légales</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
+    <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-scales" style="vertical-align:middle;margin-right:.3rem"></i> Mentions légales</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
     <div class="info-card"><h2>Éditeur</h2><p>Lycée Français de Tananarive (LFT) · Établissement en gestion directe de l'AEFE · Antananarivo, Madagascar</p></div>
     <div class="info-card"><h2>Hébergement</h2><p>GitHub Pages (GitHub, Inc.) · Base de données : Google Sheets &amp; Apps Script (Google LLC)</p></div>
     <div class="info-card"><h2>Données personnelles (RGPD)</h2>
