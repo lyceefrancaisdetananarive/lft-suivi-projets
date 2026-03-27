@@ -268,6 +268,61 @@ nav {
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
 }
 .btn-danger:hover { background:rgba(239,68,68,.14); transform:translateY(-1px); }
+.btn-xs { padding:.35rem .8rem; font-size:.78rem; }
+
+/* ═══════════════════════════════════════
+   LOCK BADGE
+═══════════════════════════════════════ */
+.lock-badge {
+  display:inline-block; background:rgba(234,179,8,.15); color:#a16207;
+  padding:.15rem .5rem; border-radius:6px; font-size:.75rem; font-weight:600;
+  border:1px solid rgba(234,179,8,.25);
+}
+
+/* ═══════════════════════════════════════
+   AUDIT INFO
+═══════════════════════════════════════ */
+.audit-info { font-size:.82rem; color:var(--t2); }
+.audit-info p { margin:0; }
+
+/* ═══════════════════════════════════════
+   COMMENTS
+═══════════════════════════════════════ */
+.comments-section {
+  margin-top:1.5rem; padding:1.2rem;
+  background:var(--g1); border-radius:var(--r-md);
+  border:1px solid var(--b1);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+}
+.comments-section h3 { margin-bottom:.8rem; font-size:1rem; }
+.comments-list { display:flex; flex-direction:column; gap:.6rem; margin-bottom:1rem; }
+.comment-item {
+  background:var(--g2); border-radius:var(--r-sm); padding:.7rem .9rem;
+  border:1px solid var(--b0);
+}
+.comment-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.3rem; font-size:.82rem; }
+.comment-date { color:var(--t3); font-size:.75rem; }
+.comment-body { font-size:.88rem; line-height:1.5; color:var(--t1); }
+.comment-empty { color:var(--t3); font-size:.85rem; font-style:italic; padding:.5rem 0; }
+.comment-form { display:flex; gap:.6rem; align-items:flex-end; }
+.comment-input {
+  flex:1; resize:vertical; min-height:60px; padding:.6rem .8rem;
+  border:1px solid var(--b2); border-radius:var(--r-sm); font-family:inherit;
+  font-size:.88rem; background:var(--g3);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+}
+.comment-input:focus { outline:none; border-color:var(--aefe-blue); box-shadow:0 0 0 3px rgba(0,83,163,.1); }
+
+/* ═══════════════════════════════════════
+   TRASH
+═══════════════════════════════════════ */
+.trash-list { display:flex; flex-direction:column; gap:.6rem; }
+.trash-card { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }
+.trash-info { flex:1; min-width:200px; }
+.trash-info strong { display:block; font-size:.92rem; }
+.trash-meta { display:block; font-size:.78rem; color:var(--t3); margin-top:.2rem; }
+.trash-actions { display:flex; gap:.4rem; flex-wrap:wrap; }
+.tile-trash { border-left:3px solid rgba(239,68,68,.4); }
 
 /* ═══════════════════════════════════════
    BREADCRUMB
@@ -1422,6 +1477,8 @@ const S = {
   sel:null,
   search:'',
   statusFilter:'all',
+  trashCount:0,
+  trashProjects:[],
 };
 
 function loadSession(){
@@ -1451,10 +1508,11 @@ function checkSessionExpiry(){
 /* ═══════════════════════════════════════════════════════════
    PERMISSIONS
 ═══════════════════════════════════════════════════════════ */
+const VS_CATS=['Clubs et activités','Projets de l\'Internat'];
 function isVS(){ return S.user && S.user.role==='vie_scolaire'; }
 function canAdd(){ return !!S.user; }
-function canEdit(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&p.Categorie==='Clubs et activités')||S.user.email===p.Created_By); }
-function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&p.Categorie==='Clubs et activités')); }
+function canEdit(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||S.user.email===p.Created_By); }
+function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||(S.user.role==='enseignant'&&S.user.email===p.Created_By)); }
 function canRequestDeletion(){ return S.user && (S.user.role==='enseignant'||S.user.role==='vie_scolaire'); }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1814,6 +1872,7 @@ function renderDashboard(){
   Object.keys(CATS).forEach(k=>cnt[k]=0);
   ps.forEach(p=>{ if(cnt[p.Categorie]!==undefined)cnt[p.Categorie]++; });
   const isAdmin=S.user&&S.user.role==='admin';
+  const isAdDir=S.user&&(S.user.role==='admin'||S.user.role==='direction');
 
   mc.innerHTML=`
     <!-- HERO — titre centré, sans logo doublon -->
@@ -1860,7 +1919,10 @@ function renderDashboard(){
     <!-- SECTION HEADER -->
     <div class="sec-hd">
       <div class="sec-title">Catégories de projets</div>
-      ${S.user?`<button class="btn btn-add" onclick="openAddForm()">+ Nouveau projet</button>`:''}
+      <div class="sec-actions">
+        ${isAdDir?`<a class="btn btn-back" href="${API_URL}?action=export" target="_blank" style="text-decoration:none">📥 Exporter CSV</a>`:''}
+        ${S.user?`<button class="btn btn-add" onclick="openAddForm()">+ Nouveau projet</button>`:''}
+      </div>
     </div>
 
     <!-- LIGNE 1 : Projet d'Établissement (vedette 2/3) + Chronologie (1/3) -->
@@ -1940,6 +2002,15 @@ function renderDashboard(){
             <div class="tile-name">Administration</div>
             <p class="tile-desc">Gestion des comptes utilisateurs et accès</p>
             <span class="tile-chip tc-muted">Comptes &amp; emails</span>
+          </div>`
+        : ''}
+      ${isAdDir
+        ? `<div class="dash-tile tile-glass tile-trash" onclick="showPage('trash')">
+            <div class="tile-watermark">🗑️</div>
+            <div class="tile-icon">🗑️</div>
+            <div class="tile-name">Corbeille</div>
+            <p class="tile-desc">Projets supprimés en attente de restauration</p>
+            <span class="tile-chip tc-muted">${S.trashCount} projet${S.trashCount>1?'s':''}</span>
           </div>`
         : ''}
     </div>
@@ -2082,6 +2153,9 @@ function renderDetail(p){
   const s=computeStatus(p);
   const ci=CATS[p.Categorie]||{cb:'cb-def'};
   const cEdit=canEdit(p); const cDel=canDelete(p);
+  const isAdDir=S.user&&(S.user.role==='admin'||S.user.role==='direction');
+  const isLocked=p.Locked==='1';
+  const showEdit=cEdit&&(!isLocked||isAdDir);
   const axN=p.Axe_Projet_Etablissement?(p.Axe_Projet_Etablissement.match(/\d/)||[])[0]:'';
   const ax=AXES.find(a=>String(a.n)===axN);
   const objs=p.Objectifs_Pedagogiques?p.Objectifs_Pedagogiques.split('|').filter(Boolean):'';
@@ -2090,7 +2164,7 @@ function renderDetail(p){
     <div class="detail-wrap">
       <div class="detail-banner">
         <div class="detail-banner-bg"></div>
-        <div class="detail-id">${p.ID_Projet||''} · ${p.Categorie||''}</div>
+        <div class="detail-id">${p.ID_Projet||''} · ${p.Categorie||''}${isLocked?' · <span class="lock-badge">🔒 Verrouillé</span>':''}</div>
         <div class="detail-title">${p.Nom_Projet||'Sans titre'}</div>
         <div class="detail-meta">
           <span class="dmeta-chip">${SL[s]}</span>
@@ -2133,14 +2207,137 @@ function renderDetail(p){
         ${p.Partenariats?`<div class="dblock"><h3>🤝 Partenariats</h3><p>${p.Partenariats}</p></div>`:''}
         ${p.Ressources_Necessaires?`<div class="dblock"><h3>🛠️ Ressources</h3><p>${p.Ressources_Necessaires}</p></div>`:''}
         ${p.Modalite_Valorisation?`<div class="dblock full"><h3>🌟 Valorisation</h3><p>${p.Modalite_Valorisation}</p></div>`:''}
+
+        <!-- Audit info -->
+        ${p.Last_Modified_By?`<div class="dblock full audit-info">
+          <p>📝 Dernière modification par <strong>${p.Last_Modified_By}</strong> le ${fmt(p.Last_Modified_At||'')}</p>
+        </div>`:''}
+        ${isLocked?`<div class="dblock full audit-info">
+          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+p.Locked_By+'</strong>':''}${p.Locked_At?' le '+fmt(p.Locked_At):''}</p>
+        </div>`:''}
+        ${isLocked&&!isAdDir?`<div class="dblock full"><div class="msg-info">🔒 Ce projet est verrouillé. Seuls les administrateurs et la direction peuvent le modifier.</div></div>`:''}
       </div>
 
       <div class="detail-actions">
-        ${cEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>`:''}
+        ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>`:''}
+        ${isAdDir?`<button class="btn btn-back" onclick="toggleLock('${p.ID_Projet}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
         ${cDel?`<button class="btn btn-danger" onclick="delProject('${p.ID_Projet}')">🗑️ Supprimer</button>`:''}
         <button class="btn btn-back" onclick="history.back()">← Retour</button>
       </div>
+
+      <!-- Section commentaires -->
+      ${S.user?`
+      <div class="comments-section">
+        <h3>💬 Commentaires</h3>
+        <div id="comments-list" class="comments-list"><div class="loader"><div class="spin"></div> Chargement…</div></div>
+        <div class="comment-form">
+          <textarea id="comment-text" class="comment-input" placeholder="Ajouter un commentaire…" rows="3"></textarea>
+          <button class="btn btn-add" onclick="submitComment('${p.ID_Projet}')">Envoyer</button>
+        </div>
+      </div>`:''}
     </div>`;
+  if(S.user) loadComments(p.ID_Projet);
+}
+
+/* ── Comments ── */
+async function loadComments(id){
+  try {
+    const d=await apiGet({action:'list-comments',id});
+    const el=document.getElementById('comments-list');
+    if(!el) return;
+    if(d.success && d.data && d.data.length){
+      el.innerHTML=d.data.map(c=>`
+        <div class="comment-item">
+          <div class="comment-header"><strong>${esc(c.Author||c.Email||'')}</strong><span class="comment-date">${c.Date||''}</span></div>
+          <div class="comment-body">${esc(c.Comment||c.Text||'')}</div>
+        </div>`).join('');
+    } else {
+      el.innerHTML='<p class="comment-empty">Aucun commentaire pour le moment.</p>';
+    }
+  } catch(e){ const el=document.getElementById('comments-list'); if(el) el.innerHTML='<p class="comment-empty">Impossible de charger les commentaires.</p>'; }
+}
+
+async function submitComment(id){
+  const txt=document.getElementById('comment-text');
+  if(!txt||!txt.value.trim()){ toast('Veuillez saisir un commentaire.','⚠️'); return; }
+  try {
+    const d=await apiPost({action:'add-comment',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id,comment:txt.value.trim()});
+    if(d.success){ txt.value=''; toast('Commentaire ajouté.','💬'); loadComments(id); }
+    else toast(d.error||'Erreur.','❌');
+  } catch(e){ toast('Erreur réseau.','❌'); }
+}
+
+/* ── Lock / Unlock ── */
+async function toggleLock(id,lock){
+  const action=lock?'lock-project':'unlock-project';
+  try {
+    const d=await apiPost({action,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id});
+    if(d.success){ await loadProjects(); const p=S.projects.find(x=>x.ID_Projet===id); if(p){ S.sel=p; renderDetail(p); } toast(lock?'Projet verrouillé.':'Projet déverrouillé.',lock?'🔒':'🔓'); }
+    else toast(d.error||'Erreur.','❌');
+  } catch(e){ toast('Erreur réseau.','❌'); }
+}
+
+/* ── Trash ── */
+async function loadTrashCount(){
+  if(!S.user||(S.user.role!=='admin'&&S.user.role!=='direction')) return;
+  try {
+    const d=await apiGet({action:'list-trash',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    if(d.success){ S.trashProjects=d.data||[]; S.trashCount=S.trashProjects.length; }
+  } catch(e){}
+}
+
+function renderTrash(mc){
+  mc.innerHTML=`
+    <div class="sec-hd">
+      <div class="sec-title">🗑️ Corbeille</div>
+      <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
+    </div>
+    <div id="trash-list" class="trash-list"><div class="loader"><div class="spin"></div> Chargement…</div></div>`;
+  loadTrashList();
+}
+
+async function loadTrashList(){
+  try {
+    const d=await apiGet({action:'list-trash',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const el=document.getElementById('trash-list');
+    if(!el) return;
+    if(d.success && d.data && d.data.length){
+      S.trashProjects=d.data; S.trashCount=d.data.length;
+      el.innerHTML=d.data.map(p=>`
+        <div class="admin-card trash-card">
+          <div class="trash-info">
+            <strong>${esc(p.Nom_Projet||'Sans titre')}</strong>
+            <span class="trash-meta">${esc(p.Categorie||'')} · Supprimé par ${esc(p.Deleted_By||'?')} le ${p.Deleted_At||'?'}</span>
+          </div>
+          <div class="trash-actions">
+            <button class="btn btn-add btn-xs" onclick="restoreProject('${p.ID_Projet}')">Restaurer</button>
+            <button class="btn btn-danger btn-xs" onclick="permanentDelete('${p.ID_Projet}','${esc(p.Nom_Projet||'')}')">Supprimer définitivement</button>
+          </div>
+        </div>`).join('');
+    } else {
+      el.innerHTML='<div class="comment-empty" style="text-align:center;padding:2rem">La corbeille est vide.</div>';
+    }
+  } catch(e){ const el=document.getElementById('trash-list'); if(el) el.innerHTML='<p>Erreur de chargement.</p>'; }
+}
+
+async function restoreProject(id){
+  confirm2('Restaurer ce projet','Voulez-vous restaurer ce projet ?', async()=>{
+    try {
+      const d=await apiPost({action:'restore',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id});
+      if(d.success){ await loadProjects(); await loadTrashCount(); loadTrashList(); toast('Projet restauré.','♻️'); }
+      else toast(d.error||'Erreur.','❌');
+    } catch(e){ toast('Erreur réseau.','❌'); }
+  });
+}
+
+async function permanentDelete(id,name){
+  confirm2('Suppression définitive',`Supprimer définitivement "${name}" ? Cette action est irréversible.`, async()=>{
+    try {
+      const d=await apiGet({action:'permanent-delete',id,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+      if(d.success){ await loadTrashCount(); loadTrashList(); toast('Projet supprimé définitivement.','💀'); }
+      else toast(d.error||'Erreur.','❌');
+    } catch(e){ toast('Erreur réseau.','❌'); }
+  });
 }
 
 function fmt(d){
@@ -2387,9 +2584,9 @@ async function doUpdate(id){
 async function delProject(id){
   const p=S.projects.find(x=>x.ID_Projet===id);
   if(!p) return;
-  confirm2('Supprimer ce projet',`Supprimer "${p.Nom_Projet}" ? Action irréversible.`, async()=>{
+  confirm2('Mettre à la corbeille',`Déplacer "${p.Nom_Projet}" vers la corbeille ?`, async()=>{
     const d=await apiGet({action:'delete',table:'Projets',id,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
-    if(d.success){ await loadProjects(); showDashboard(); toast('Projet supprimé.','🗑️'); }
+    if(d.success){ await loadProjects(); await loadTrashCount(); showDashboard(); toast('Projet déplacé vers la corbeille.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
 }
@@ -2403,7 +2600,7 @@ function showPage(pg){
   checkSessionExpiry();
   S.page=pg; S.filter=null;
   const lbls={chronologie:'Chronologie',etab:"Projet d'Établissement",clubs:'Clubs & Activités',
-    internat:"Projets de l'Internat",admin:'Administration',tutoriel:'Tutoriels',mentions:'Mentions légales'};
+    internat:"Projets de l'Internat",admin:'Administration',trash:'Corbeille',tutoriel:'Tutoriels',mentions:'Mentions légales'};
   setBc([{l:lbls[pg]||pg}]);
   const mc=document.getElementById('mc');
   switch(pg){
@@ -2412,6 +2609,7 @@ function showPage(pg){
     case 'clubs':       renderClubs(mc); break;
     case 'internat':    renderInternat(mc); break;
     case 'admin':       renderAdmin(mc); break;
+    case 'trash':       renderTrash(mc); break;
     case 'tutoriel':    renderTutoriel(mc); break;
     case 'mentions':    renderMentions(mc); break;
   }
@@ -2890,6 +3088,7 @@ async function init(){
   document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement des projets…</div>`;
   setBc([]);
   await loadProjects();
+  await loadTrashCount();
   // Détecter un token de réinitialisation dans l'URL (?reset=TOKEN)
   const params=new URLSearchParams(window.location.search);
   const resetToken=params.get('reset');
