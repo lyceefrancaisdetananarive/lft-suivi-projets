@@ -428,9 +428,10 @@ nav {
 .tile-desc {
   font-size:.76rem; color:var(--t2); margin:.05rem 0 0;
   font-family:'Marianne',arial,sans-serif; line-height:1.45;
+  position:relative; z-index:2;
 }
 /* Badges multiples dans une tuile */
-.tile-chips { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.35rem; }
+.tile-chips { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.35rem; position:relative; z-index:2; }
 /* Tuile discrète */
 .tile-muted { opacity:.45; transition:opacity var(--dur) var(--ease); }
 .tile-muted:hover { opacity:1; }
@@ -474,10 +475,26 @@ nav {
   box-shadow:0 12px 40px rgba(0,83,163,.5), 0 0 0 1px rgba(255,255,255,.2);
 }
 
-.tile-icon { font-size:2rem; line-height:1; margin-bottom:.1rem; }
+.tile-icon { font-size:1.5rem; line-height:1; margin-bottom:.1rem; position:relative; z-index:2; }
+.dash-tile .tile-watermark {
+  position:absolute;
+  right:-8px; top:50%; transform:translateY(-50%);
+  font-size:6.5rem; line-height:1;
+  opacity:.07;
+  pointer-events:none;
+  z-index:0;
+  filter:grayscale(80%);
+  user-select:none;
+  transition:opacity var(--dur) var(--ease);
+}
+.dash-tile:hover .tile-watermark { opacity:.12; }
+.tile-accent .tile-watermark { opacity:.10; filter:grayscale(0%) brightness(10); }
+.tile-accent:hover .tile-watermark { opacity:.18; }
+.tile-help .tile-watermark { display:none; }
 .tile-name {
   font-family:'Spectral',Georgia,serif;
   font-size:1rem; font-weight:700; color:var(--t0); line-height:1.25;
+  position:relative; z-index:2;
 }
 .tile-accent .tile-name { color:#fff; }
 .tile-chip {
@@ -485,6 +502,7 @@ nav {
   font-size:.7rem; font-weight:600; padding:.2rem .6rem;
   border-radius:999px; color:#fff; align-self:flex-start;
   border:1px solid rgba(255,255,255,.2);
+  position:relative; z-index:2;
 }
 .tc-lft  { background:rgba(234,88,12,.1); color:var(--cat-lft); border-color:rgba(234,88,12,.2); }
 .tc-zone { background:rgba(8,145,178,.1); color:var(--cat-zone); border-color:rgba(8,145,178,.2); }
@@ -1189,6 +1207,7 @@ footer a:hover { color:var(--aefe-magenta); }
   .nav-inner  { height:68px; }
   .nav-logo   { width:48px; height:48px; }
   .nav-wordmark strong { font-size:.9rem; }
+  .dash-tile .tile-watermark { font-size:4.5rem; right:-4px; }
   .hstat-num  { font-size:1.4rem; }
   .hero-stats { gap:.5rem; }
   .hstat      { padding:.65rem .9rem; min-width:80px; }
@@ -1713,6 +1732,7 @@ function renderDashboard(){
     <!-- LIGNE 1 : Projet d'Établissement (vedette 2/3) + Chronologie (1/3) -->
     <div class="dash-featured">
       <div class="dash-tile tile-accent tile-featured" onclick="showPage('etab')">
+        <div class="tile-watermark">🎭</div>
         <div class="tile-icon">🎭</div>
         <div class="tile-name">Projet d'Établissement</div>
         <p class="tile-desc">Document stratégique LFT · 3 axes pédagogiques · 2025–2030</p>
@@ -1723,6 +1743,7 @@ function renderDashboard(){
         </div>
       </div>
       <div class="dash-tile tile-glass" onclick="showPage('chronologie')">
+        <div class="tile-watermark">📅</div>
         <div class="tile-icon">📅</div>
         <div class="tile-name">Suivi Chronologique</div>
         <p class="tile-desc">Calendrier des projets et événements de l'année scolaire</p>
@@ -1733,24 +1754,28 @@ function renderDashboard(){
     <!-- LIGNE 2 : 4 catégories de projets -->
     <div class="dash-grid-cats">
       <div class="dash-tile tile-glass" onclick="goCategory('Projet LFT')">
+        <div class="tile-watermark">📊</div>
         <div class="tile-icon">📊</div>
         <div class="tile-name">Projets LFT</div>
         <p class="tile-desc">Initiatives portées par l'établissement</p>
         <span class="tile-chip tc-lft">${cnt['Projet LFT']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet Zone OI')">
+        <div class="tile-watermark">🌊</div>
         <div class="tile-icon">🌊</div>
         <div class="tile-name">Zone Océan Indien</div>
         <p class="tile-desc">Coopérations régionales AEFE</p>
         <span class="tile-chip tc-zone">${cnt['Projet Zone OI']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet AEFE')">
+        <div class="tile-watermark">🌍</div>
         <div class="tile-icon">🌍</div>
         <div class="tile-name">Projets AEFE</div>
         <p class="tile-desc">Programmes du réseau mondial</p>
         <span class="tile-chip tc-aefe">${cnt['Projet AEFE']} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="goCategory('Projet institutionnel')">
+        <div class="tile-watermark">🏛️</div>
         <div class="tile-icon">🏛️</div>
         <div class="tile-name">Projets Institutionnels</div>
         <p class="tile-desc">Partenariats et cadre réglementaire</p>
@@ -1761,12 +1786,14 @@ function renderDashboard(){
     <!-- LIGNE 3 : Vie scolaire + Admin (si admin) -->
     <div class="dash-grid-sec">
       <div class="dash-tile tile-glass" onclick="showPage('clubs')">
+        <div class="tile-watermark">💡</div>
         <div class="tile-icon">💡</div>
         <div class="tile-name">Clubs &amp; Activités</div>
         <p class="tile-desc">Activités périscolaires et pause méridienne</p>
         <span class="tile-chip tc-clubs">${cnt['Clubs et activités']||0} projets</span>
       </div>
       <div class="dash-tile tile-glass" onclick="showPage('internat')">
+        <div class="tile-watermark">🏠</div>
         <div class="tile-icon">🏠</div>
         <div class="tile-name">Projets de l'Internat</div>
         <p class="tile-desc">Accompagnement et vie en résidence</p>
@@ -1774,6 +1801,7 @@ function renderDashboard(){
       </div>
       ${isAdmin
         ? `<div class="dash-tile tile-glass" onclick="showPage('admin')">
+            <div class="tile-watermark">⚙️</div>
             <div class="tile-icon">⚙️</div>
             <div class="tile-name">Administration</div>
             <p class="tile-desc">Gestion des comptes utilisateurs et accès</p>
