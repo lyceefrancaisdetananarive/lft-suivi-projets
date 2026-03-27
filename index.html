@@ -1480,7 +1480,7 @@ function _devInfo(){
   return {d_pays:loc[0],d_ville:loc[1],d_os:os,d_nav:nav,d_app:app};
 }
 async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',body:JSON.stringify(b),headers:{'Content-Type':'application/json'}}); return r.json(); }
+async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify(b),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
 
 async function loadProjects(){
   try {
