@@ -316,19 +316,21 @@ nav {
     radial-gradient(ellipse 40% 60% at 100% 100%, rgba(212,8,131,.35) 0%, transparent 60%),
     linear-gradient(160deg, #071b35 0%, #040f1e 100%);
 }
-.hero-content { position:relative; z-index:1; }
-.hero-top {
+.hero-content {
+  position:relative; z-index:1;
   display:flex; flex-direction:row; align-items:center;
-  gap:2rem; margin-bottom:1.75rem; text-align:left;
+  gap:2.5rem;
 }
 .hero-logo {
-  width:130px; height:130px; border-radius:50%;
+  width:140px; height:140px; border-radius:50%;
   overflow:hidden; border:3px solid rgba(255,255,255,.25);
   background:var(--aefe-blue); flex-shrink:0;
   box-shadow:0 8px 32px rgba(0,0,0,.3), 0 0 0 6px rgba(255,255,255,.08);
+  align-self:center;
 }
 .hero-logo img { width:100%; height:100%; object-fit:cover; }
-.hero-tagline { flex:1; }
+.hero-right { flex:1; min-width:0; }
+.hero-tagline { margin-bottom:1.2rem; }
 .hero-school-name {
   font-family:'Marianne',arial,sans-serif !important;
   font-size:clamp(1rem,2.2vw,1.35rem) !important; font-weight:800 !important;
@@ -350,7 +352,7 @@ nav {
 
 /* Hero stats */
 .hero-stats {
-  display:flex; gap:.75rem; flex-wrap:wrap; justify-content:center;
+  display:flex; gap:.75rem; flex-wrap:wrap; justify-content:flex-start;
 }
 .hstat {
   position:relative;
@@ -1147,7 +1149,7 @@ footer a:hover { color:var(--aefe-magenta); }
 
 /* Hero labels institutionnels */
 .hero-labels {
-  display:flex; gap:.45rem; flex-wrap:wrap; justify-content:center; margin-top:.9rem;
+  display:flex; gap:.45rem; flex-wrap:wrap; justify-content:flex-start; margin-top:.9rem;
 }
 .hero-label-badge {
   font-size:.67rem; padding:.18rem .68rem; border-radius:999px;
@@ -1182,6 +1184,8 @@ footer a:hover { color:var(--aefe-magenta); }
    RESPONSIVE
 ═══════════════════════════════════════ */
 @media (max-width:1000px) {
+  .hero-content { gap:1.8rem; }
+  .hero-logo { width:110px; height:110px; }
   .dash-featured    { grid-template-columns:1fr; }
   .dash-grid-cats   { grid-template-columns:repeat(2,1fr); }
   .dash-grid-sec    { grid-template-columns:repeat(2,1fr); }
@@ -1203,8 +1207,11 @@ footer a:hover { color:var(--aefe-magenta); }
   .proj-grid  { grid-template-columns:1fr; }
   .fg-row     { grid-template-columns:1fr; }
   .hero       { padding:1.5rem 1.1rem 1.3rem; }
-  .hero-top   { gap:1rem; }
-  .hero-logo  { width:85px; height:85px; border-width:2px; box-shadow:0 4px 16px rgba(0,0,0,.2), 0 0 0 4px rgba(255,255,255,.06); }
+  .hero-content { flex-direction:column; gap:1.2rem; text-align:center; }
+  .hero-logo  { width:90px; height:90px; border-width:2px; box-shadow:0 4px 16px rgba(0,0,0,.2), 0 0 0 4px rgba(255,255,255,.06); align-self:center; }
+  .hero-right { text-align:center; }
+  .hero-stats { justify-content:center; }
+  .hero-labels { justify-content:center; }
   .hero-school-name { letter-spacing:.06em !important; font-size:.85rem !important; }
   .hero-tagline h1 { font-size:1.3rem; }
   .nav-inner  { height:64px; }
@@ -1689,17 +1696,16 @@ function renderDashboard(){
     <section class="hero">
       <div class="hero-bg-img"></div>
       <div class="hero-content">
-        <div class="hero-top">
-          <div class="hero-logo">
-            <img src="logo-lft.jpg" alt="Logo LFT" onerror="this.style.display='none'">
-          </div>
+        <div class="hero-logo">
+          <img src="logo-lft.jpg" alt="Logo LFT" onerror="this.style.display='none'">
+        </div>
+        <div class="hero-right">
           <div class="hero-tagline">
             <h1 class="hero-school-name">LYCÉE FRANÇAIS DE TANANARIVE</h1>
             <h1>Suivi des <em>projets de l'établissement</em></h1>
             <p>Établissement en gestion directe de l'AEFE · Année scolaire 2025–2026</p>
           </div>
-        </div>
-        <div class="hero-stats">
+          <div class="hero-stats">
           <div class="hstat" onclick="goFiltered(null)">
             <span class="hstat-num" id="hn-total">${total}</span>
             <span class="hstat-label">Total projets</span>
@@ -1717,11 +1723,12 @@ function renderDashboard(){
             <span class="hstat-label">Terminés</span>
           </div>
         </div>
-        <div class="hero-labels">
-          <span class="hero-label-badge">🏅 Label EFR3D Niv. 2</span>
-          <span class="hero-label-badge">🗣️ Label PARLE</span>
-          <span class="hero-label-badge">🏆 Label Génération 2024</span>
-          <span class="hero-label-badge">🌐 egd.mg</span>
+          <div class="hero-labels">
+            <span class="hero-label-badge">🏅 Label EFR3D Niv. 2</span>
+            <span class="hero-label-badge">🗣️ Label PARLE</span>
+            <span class="hero-label-badge">🏆 Label Génération 2024</span>
+            <span class="hero-label-badge">🌐 egd.mg</span>
+          </div>
         </div>
       </div>
     </section>
