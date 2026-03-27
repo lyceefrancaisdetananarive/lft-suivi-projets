@@ -1460,8 +1460,27 @@ function canRequestDeletion(){ return S.user && (S.user.role==='enseignant'||S.u
 /* ═══════════════════════════════════════════════════════════
    API
 ═══════════════════════════════════════════════════════════ */
-async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams(p)); return r.json(); }
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams(p),{method:'POST',body:JSON.stringify(b),headers:{'Content-Type':'application/json'}}); return r.json(); }
+/* Device info — RGPD : timezone uniquement, pas de geolocalisation IP */
+function _devInfo(){
+  const ua=navigator.userAgent;
+  let os='Inconnu',nav='Inconnu',app='PC';
+  if(ua.includes('Windows'))os='Windows'; else if(ua.includes('Mac OS'))os='macOS';
+  else if(ua.includes('CrOS'))os='ChromeOS'; else if(ua.includes('Linux'))os='Linux';
+  else if(ua.includes('Android')){os='Android';app='Mobile';} else if(ua.includes('iPhone')){os='iOS';app='Mobile';}
+  else if(ua.includes('iPad')){os='iPadOS';app='Tablette';}
+  if(ua.includes('Firefox/'))nav='Firefox'; else if(ua.includes('Edg/'))nav='Edge';
+  else if(ua.includes('Chrome/')&&!ua.includes('Edg/'))nav='Chrome';
+  else if(ua.includes('Safari/')&&!ua.includes('Chrome'))nav='Safari';
+  const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+  const tzMap={'Indian/Antananarivo':['Madagascar','Antananarivo'],'Europe/Paris':['France','Paris'],
+    'Indian/Reunion':['La Réunion','Saint-Denis'],'Indian/Mayotte':['Mayotte','Mamoudzou'],
+    'Indian/Comoro':['Comores','Moroni'],'Africa/Nairobi':['Kenya','Nairobi'],
+    'Asia/Ho_Chi_Minh':['Vietnam','Ho Chi Minh'],'America/New_York':['États-Unis','New York']};
+  const loc=tzMap[tz]||[tz.split('/')[0]||'',tz.split('/')[1]||''];
+  return {d_pays:loc[0],d_ville:loc[1],d_os:os,d_nav:nav,d_app:app};
+}
+async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
+async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',body:JSON.stringify(b),headers:{'Content-Type':'application/json'}}); return r.json(); }
 
 async function loadProjects(){
   try {
@@ -1643,18 +1662,16 @@ function openLogin(){
 function openRegister(){
   document.getElementById('auth-body').innerHTML=`
     <h2>✏️ Créer un compte</h2>
-    <div class="msg-info">Votre adresse @egd.mg doit être pré-autorisée par l'administrateur.</div>
+    <div class="msg-info">Votre adresse @egd.mg doit être pré-autorisée par l'administrateur.<br>Un mot de passe provisoire vous sera attribué automatiquement.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
-    <div class="fg-row">
-      <div class="fg"><label>Prénom</label><input type="text" id="r-pn" placeholder="Jean"></div>
-      <div class="fg"><label>Nom</label><input type="text" id="r-nm" placeholder="DUPONT"></div>
+    <div id="reg-fields">
+      <div class="fg-row">
+        <div class="fg"><label>Prénom</label><input type="text" id="r-pn" placeholder="Jean"></div>
+        <div class="fg"><label>Nom</label><input type="text" id="r-nm" placeholder="DUPONT"></div>
+      </div>
+      <div class="fg"><label>Email @egd.mg</label><input type="email" id="r-em" placeholder="jean.dupont@egd.mg"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doRegister()">Créer mon compte</button>
     </div>
-    <div class="fg"><label>Email @egd.mg</label><input type="email" id="r-em" placeholder="jean.dupont@egd.mg"></div>
-    <div class="fg-row">
-      <div class="fg"><label>Mot de passe</label><div class="fg-pw"><input type="password" id="r-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-      <div class="fg"><label>Confirmer</label><div class="fg-pw"><input type="password" id="r-p2" placeholder="Répéter"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-    </div>
-    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doRegister()">Créer mon compte</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
 }
 function openForgot(){
@@ -1671,7 +1688,7 @@ function openResetForm(token){
   document.getElementById('auth-ov').classList.add('open');
   document.getElementById('auth-body').innerHTML=`
     <h2>🔑 Nouveau mot de passe</h2>
-    <div class="msg-info">Choisissez un nouveau mot de passe (min. 6 caractères).</div>
+    <div class="msg-info">Choisissez un nouveau mot de passe (min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre).</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
       <div class="fg-pw"><input type="password" id="f-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
@@ -1688,24 +1705,68 @@ async function doLogin(){
   try {
     const d=await apiGet({action:'login',email:em,password:pw});
     if(d.success){
-      S.user=d.user; saveSession(d.user);
-      localStorage.setItem('lft_e',em); localStorage.setItem('lft_p',pw);
-      closeAuth(); updateHeader(); toast('Bienvenue '+(d.user.prenom||''),'👋'); renderCurrent();
+      if(d.user.first_login){
+        // Première connexion → forcer le changement de mot de passe
+        openForceChangePassword(em,pw,d.user);
+      } else {
+        S.user=d.user; saveSession(d.user);
+        localStorage.setItem('lft_e',em); localStorage.setItem('lft_p',pw);
+        closeAuth(); updateHeader(); toast('Bienvenue '+(d.user.prenom||''),'👋'); renderCurrent();
+      }
     } else { err.textContent=d.error||'Identifiants incorrects.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau. Vérifiez l\'URL de l\'API.'; err.style.display='block'; }
 }
-async function doRegister(){
-  const pn=v('r-pn'), nm=v('r-nm').toUpperCase(), em=v('r-em').toLowerCase(), pw=v('r-pw'), p2=v('r-p2');
+
+/* Première connexion : changement de mot de passe obligatoire (style Pronote) */
+function openForceChangePassword(email,oldPw,userInfo){
+  document.getElementById('auth-body').innerHTML=`
+    <h2>🔐 Première connexion</h2>
+    <div class="msg-info">Bienvenue <strong>${userInfo.prenom||''} ${userInfo.nom||''}</strong> !<br>Pour des raisons de sécurité, vous devez choisir un nouveau mot de passe personnel.</div>
+    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
+    <div class="fg"><label>Nouveau mot de passe</label>
+      <div class="fg-pw"><input type="password" id="cp-pw" placeholder="Min. 8 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+      <div class="fg-hint">Min. 8 caractères · 1 majuscule · 1 minuscule · 1 chiffre</div></div>
+    <div class="fg"><label>Confirmer le mot de passe</label>
+      <div class="fg-pw"><input type="password" id="cp-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doForceChange()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForceChange()">Valider mon nouveau mot de passe</button>`;
+  // Stocker temporairement pour l'envoi
+  window._fcEmail=email; window._fcOldPw=oldPw; window._fcUser=userInfo;
+}
+
+async function doForceChange(){
+  const pw=v('cp-pw'), p2=v('cp-p2');
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!pn||!nm||!em||!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
-  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
-  if(pw.length<6){ err.textContent='Mot de passe : minimum 6 caractères.'; err.style.display='block'; return; }
+  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
+  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; return; }
+  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir au moins 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; return; }
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
   try {
-    const d=await apiPost({action:'register'},{Email:em,Mot_de_Passe:pw,Nom:nm,Prenom:pn});
-    if(d.success){ ok.textContent='Compte créé ! Vous pouvez vous connecter.'; ok.style.display='block'; setTimeout(openLogin,2000); }
-    else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
+    const d=await apiPost({action:'change-password',email:window._fcEmail,password:window._fcOldPw},{new_password:pw});
+    if(d.success){
+      S.user=d.user||window._fcUser; S.user.first_login=false;
+      saveSession(S.user);
+      localStorage.setItem('lft_e',window._fcEmail); localStorage.setItem('lft_p',pw);
+      closeAuth(); updateHeader(); toast('Mot de passe modifié — bienvenue '+(S.user.prenom||'')+'!','🔐'); renderCurrent();
+    } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
+  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+}
+async function doRegister(){
+  const pn=v('r-pn'), nm=v('r-nm').toUpperCase(), em=v('r-em').toLowerCase();
+  const err=document.getElementById('ae'), ok=document.getElementById('ao');
+  err.style.display='none'; ok.style.display='none';
+  if(!pn||!nm||!em){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
+  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
+  try {
+    const d=await apiPost({action:'register'},{Email:em,Nom:nm,Prenom:pn});
+    if(d.success){
+      document.getElementById('reg-fields').style.display='none';
+      ok.innerHTML=`<strong>Compte créé avec succès !</strong><br><br>
+        Voici votre mot de passe provisoire :<br>
+        <span style="display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:rgba(0,83,163,.08);border:1px solid rgba(0,83,163,.2);border-radius:8px;font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--aefe-blue);letter-spacing:.1em;user-select:all">${d.generated_password}</span><br>
+        <small style="color:var(--t2)">Notez-le précieusement. Vous devrez le modifier lors de votre première connexion.</small>`;
+      ok.style.display='block';
+    } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
 }
 async function doForgotPassword(){
@@ -1725,7 +1786,8 @@ async function doConfirmReset(token){
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
   if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
-  if(pw.length<6){ err.textContent='Mot de passe : minimum 6 caractères.'; err.style.display='block'; return; }
+  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; return; }
+  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; return; }
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
   try {
     const d=await apiPost({action:'confirm-reset'},{token,password:pw});
@@ -2624,28 +2686,29 @@ async function renderAdmin(mc){
           ${us.map(u=>{
             const isSelf=u.Email===(S.user&&S.user.email);
             const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.Role?'selected':''}>${r==='vie_scolaire'?'vie scolaire':r}</option>`).join('');
+            const fl=u.First_Login==='1';
             return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem">
               <div class="row-info" style="flex:1;min-width:0">
-                <div class="row-name">${u.Prenom||''} ${u.Nom||''}</div>
-                <div class="row-sub">${u.Email||''}</div>
+                <div class="row-name">${u.Prenom||''} ${u.Nom||''} ${fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':''}</div>
+                <div class="row-sub">${u.Email||''} ${u.Mdp_Initial?'<span style="font-size:.65rem;color:var(--t3);margin-left:.3rem">mdp : <code style="background:rgba(0,83,163,.06);padding:.1rem .3rem;border-radius:4px;font-family:monospace;color:var(--aefe-blue)">'+u.Mdp_Initial+'</code></span>':''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
                 ${isSelf
                   ? roleTag(u.Role)
                   : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${u.Email}',this)">${roleOpts}</select>`
                 }
+                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${u.Email}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
                 ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${u.Email}')">✕</button>`:''}
               </div>
             </div>`;
           }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
-          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">➕ Créer un compte</div>
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem">➕ Créer un compte <small style="color:var(--t3);font-weight:400">mot de passe auto-généré</small></div>
           <div class="fg-row" style="gap:.5rem;margin-top:.45rem">
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Prénom</label><input class="admin-input" type="text" id="nu-pn" placeholder="Jean"></div>
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Nom</label><input class="admin-input" type="text" id="nu-nm" placeholder="DUPONT"></div>
           </div>
           <div style="margin:.3rem 0"><label style="font-size:.7rem;color:var(--t3)">Email @egd.mg</label><input class="admin-input" type="email" id="nu-em" placeholder="jean.dupont@egd.mg" style="width:100%;margin-top:.2rem"></div>
           <div class="fg-row" style="gap:.5rem;margin:.3rem 0">
-            <div class="fg" style="flex:1"><label style="font-size:.7rem">Mot de passe</label><div class="fg-pw"><input class="admin-input" type="password" id="nu-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
             <div class="fg" style="flex:1"><label style="font-size:.7rem">Rôle</label>
               <select class="admin-input" id="nu-ro">
                 <option value="enseignant">Enseignant</option>
@@ -2684,17 +2747,19 @@ async function renderAdmin(mc){
               <thead><tr style="color:var(--t3)">
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Date</th>
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Utilisateur</th>
-                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Rôle</th>
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Action</th>
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Détail</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Lieu</th>
+                <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Système</th>
               </tr></thead>
-              <tbody>${logs.slice(0,50).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+              <tbody>${logs.slice(0,100).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
                 <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${l.Date_Heure||''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Email||''}</td>
-                <td style="padding:.28rem .5rem">${roleTag(l.Role)}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Email||''} ${l.Role?roleTag(l.Role):''}</td>
                 <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${l.Action||''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Detail||''}</td>
-              </tr>`).join('')||'<tr><td colspan="5" style="color:var(--t3);padding:.5rem">Aucun journal.</td></tr>'}
+                <td style="padding:.28rem .5rem;color:var(--t2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.Detail||''}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Ville,l.Pays].filter(Boolean).join(', ')||'—'}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Navigateur,l.OS,l.Appareil].filter(Boolean).join(' · ')||'—'}</td>
+              </tr>`).join('')||'<tr><td colspan="6" style="color:var(--t3);padding:.5rem">Aucun journal.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -2714,20 +2779,24 @@ async function addUser(){
   const pnEl=document.getElementById('nu-pn');
   const nmEl=document.getElementById('nu-nm');
   const emEl=document.getElementById('nu-em');
-  const pwEl=document.getElementById('nu-pw');
   const roEl=document.getElementById('nu-ro');
-  if(!pnEl||!nmEl||!emEl||!pwEl||!roEl){ toast('Formulaire introuvable.','❌'); return; }
+  if(!pnEl||!nmEl||!emEl||!roEl){ toast('Formulaire introuvable.','❌'); return; }
   const pn=pnEl.value.trim();
   const nm=nmEl.value.trim().toUpperCase();
   const em=emEl.value.trim().toLowerCase();
-  const pw=pwEl.value.trim();
   const ro=roEl.value||'enseignant';
-  if(!pn||!nm||!em||!pw){ toast('Tous les champs sont obligatoires.','⚠️'); return; }
+  if(!pn||!nm||!em){ toast('Prénom, nom et email sont obligatoires.','⚠️'); return; }
   if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  if(pw.length<6){ toast('Mot de passe : min. 6 caractères.','⚠️'); return; }
-  const d=await apiPost({action:'add',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{Email:em,Mot_de_Passe:pw,Role:ro,Nom:nm,Prenom:pn,Reset_Token:'',Reset_Expiry:''});
-  if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; pwEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé !','✅'); }
+  const d=await apiPost({action:'add',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{Email:em,Role:ro,Nom:nm,Prenom:pn});
+  if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+d.generated_password,'✅'); }
   else toast(d.error||'Erreur lors de la création.','❌');
+}
+async function adminResetPwd(email){
+  confirm2('Réinitialiser le mot de passe','Un nouveau mot de passe sera généré et envoyé par email à '+email+'.', async()=>{
+    const d=await apiPost({action:'admin-reset-password',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{email});
+    if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Mot de passe réinitialisé.','🔑'); }
+    else toast(d.error||'Erreur.','❌');
+  });
 }
 async function changeRole(email, sel){
   const newRole=sel.value;
@@ -2757,7 +2826,9 @@ function renderTutoriel(mc){
     <div class="info-card"><h2>Créer un compte</h2><ul>
       <li>Demandez à l'administrateur d'autoriser votre adresse @egd.mg</li>
       <li>Cliquez sur <strong>🔒 Connexion</strong> → <em>Créer un compte</em></li>
-      <li>Renseignez vos prénom, nom, email et mot de passe</li>
+      <li>Renseignez vos prénom, nom et email — un mot de passe provisoire sera généré automatiquement</li>
+      <li><strong>Notez bien</strong> ce mot de passe provisoire, il ne sera affiché qu'une seule fois</li>
+      <li>Lors de votre première connexion, vous serez invité(e) à choisir un mot de passe personnel (min. 8 car., 1 majuscule, 1 minuscule, 1 chiffre)</li>
     </ul></div>
     <div class="info-card"><h2>Ajouter un projet</h2><ul>
       <li>Connectez-vous à votre compte</li>
@@ -2784,7 +2855,7 @@ function renderMentions(mc){
     <div class="info-card"><h2>Éditeur</h2><p>Lycée Français de Tananarive (LFT) · Établissement en gestion directe de l'AEFE · Antananarivo, Madagascar</p></div>
     <div class="info-card"><h2>Hébergement</h2><p>GitHub Pages (GitHub, Inc.) · Base de données : Google Sheets &amp; Apps Script (Google LLC)</p></div>
     <div class="info-card"><h2>Données personnelles (RGPD)</h2>
-      <p>Données collectées (nom, prénom, email) : usage exclusivement interne pour l'authentification. Non transmises à des tiers. Droit d'accès et de suppression : contactez l'administrateur.</p></div>
+      <p>Données collectées : nom, prénom, email @egd.mg (authentification). Données techniques de connexion (fuseau horaire, système d'exploitation, navigateur) : journalisées à des fins de sécurité et d'audit, accessibles uniquement aux administrateurs. Aucune géolocalisation précise ni adresse IP n'est collectée. Données non transmises à des tiers. Droit d'accès et de suppression : contactez l'administrateur.</p></div>
     <div class="info-card"><h2>Propriété intellectuelle</h2>
       <p>Contenus et logo propriété du LFT et de l'AEFE. Toute reproduction interdite sans autorisation préalable.</p></div>`;
 }
