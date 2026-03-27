@@ -348,7 +348,7 @@ nav {
   background:linear-gradient(90deg,#fff 30%,rgba(212,8,131,.9));
   -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
 }
-.hero-tagline p { font-size:.85rem; color:rgba(255,255,255,.58); margin-top:.35rem; font-weight:400; }
+.hero-tagline p { font-size:.85rem; color:rgba(255,255,255,.78); margin-top:.35rem; font-weight:400; }
 
 /* Hero stats */
 .hero-stats {
@@ -380,7 +380,7 @@ nav {
   font-size:1.9rem; font-weight:700;
   line-height:1; display:block; color:#fff;
 }
-.hstat-label { font-size:.72rem; color:rgba(255,255,255,.55); font-weight:500; margin-top:.2rem; display:block; }
+.hstat-label { font-size:.72rem; color:rgba(255,255,255,.78); font-weight:500; margin-top:.2rem; display:block; }
 .hstat.plan .hstat-num { color:#fbbf24; }
 .hstat.run  .hstat-num { color:#60a5fa; }
 .hstat.done .hstat-num { color:#4ade80; }
@@ -434,6 +434,7 @@ nav {
   font-family:'Marianne',arial,sans-serif; line-height:1.45;
   position:relative; z-index:2;
 }
+.tile-accent .tile-desc { color:rgba(255,255,255,.85); }
 /* Badges multiples dans une tuile */
 .tile-chips { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.35rem; position:relative; z-index:2; }
 /* Tuile discrète */
@@ -634,11 +635,11 @@ nav {
 }
 .detail-banner-bg {
   position:absolute; inset:0;
-  background:linear-gradient(135deg,rgba(0,63,140,.92) 0%,rgba(4,15,30,.95) 50%,rgba(180,6,110,.4) 100%);
+  background:linear-gradient(135deg,rgba(0,50,120,.96) 0%,rgba(4,15,30,.97) 50%,rgba(150,5,90,.55) 100%);
 }
 .detail-banner > *:not(.detail-banner-bg) { position:relative; z-index:1; }
 .detail-id {
-  font-size:.88rem; color:rgba(255,255,255,.75); font-weight:700; margin-bottom:.6rem;
+  font-size:.88rem; color:rgba(255,255,255,.9); font-weight:700; margin-bottom:.6rem;
   letter-spacing:.06em; text-transform:uppercase;
 }
 .detail-title {
@@ -650,10 +651,10 @@ nav {
 .detail-meta { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
 .dmeta-chip {
   font-size:.88rem; font-weight:600; padding:.45rem 1.1rem;
-  border-radius:var(--r-sm); background:rgba(255,255,255,.18);
-  border:1px solid rgba(255,255,255,.3); color:#fff;
+  border-radius:var(--r-sm); background:rgba(255,255,255,.22);
+  border:1px solid rgba(255,255,255,.35); color:#fff;
   backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-  letter-spacing:.01em; text-shadow:0 1px 2px rgba(0,0,0,.15);
+  letter-spacing:.01em; text-shadow:0 1px 3px rgba(0,0,0,.3);
 }
 
 .detail-grid {
@@ -690,9 +691,9 @@ nav {
 .axe-ttl { font-family:'Spectral',Georgia,serif; font-size:.9rem; font-weight:700; color:var(--t0); margin-bottom:.5rem; }
 .axe-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
 .axe-chip {
-  font-size:.68rem; font-weight:500; padding:.18rem .55rem;
-  border-radius:999px; background:rgba(0,83,163,.15);
-  border:1px solid rgba(0,83,163,.3); color:#93c5fd;
+  font-size:.68rem; font-weight:600; padding:.18rem .55rem;
+  border-radius:999px; background:rgba(0,83,163,.12);
+  border:1px solid rgba(0,83,163,.3); color:var(--aefe-blue);
 }
 
 .detail-actions { display:flex; gap:.75rem; margin-top:1.5rem; flex-wrap:wrap; }
@@ -1153,8 +1154,8 @@ footer a:hover { color:var(--aefe-magenta); }
 }
 .hero-label-badge {
   font-size:.67rem; padding:.18rem .68rem; border-radius:999px;
-  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.13);
-  color:rgba(255,255,255,.58); font-weight:500;
+  background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22);
+  color:rgba(255,255,255,.82); font-weight:500;
 }
 
 /* Clubs & vie associative */
@@ -1524,6 +1525,58 @@ async function requestAccountDeletion(){
 }
 
 /* ═══════════════════════════════════════════════════════════
+   SPA HISTORY (pushState / popstate)
+═══════════════════════════════════════════════════════════ */
+let _skipPush=false; // flag pour éviter pushState lors du popstate
+function navPush(){
+  if(_skipPush) return;
+  const state={page:S.page, filter:S.filter, selId:S.sel?S.sel.ID_Projet:null};
+  const hash=S.page==='dashboard'?'':
+    S.page==='detail'&&S.sel?'#/detail/'+encodeURIComponent(S.sel.ID_Projet):
+    S.page==='category'?'#/cat/'+encodeURIComponent(S.filter):
+    S.page==='filtered'?'#/filter/'+(S.filter||'all'):
+    '#/'+S.page;
+  history.pushState(state,'',(hash||window.location.pathname));
+}
+window.addEventListener('popstate',function(e){
+  _skipPush=true;
+  if(e.state){
+    const st=e.state;
+    S.page=st.page||'dashboard'; S.filter=st.filter||null; S.search=''; S.statusFilter='all';
+    if(st.page==='detail'&&st.selId){
+      const p=S.projects.find(x=>x.ID_Projet===st.selId);
+      if(p){ S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]); renderDetail(p); }
+      else showDashboard();
+    } else if(st.page==='category'&&st.filter){
+      setBc([{l:st.filter}]); renderCatPage(st.filter);
+    } else if(st.page==='filtered'){
+      const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
+      setBc([{l:labels[st.filter]||'Projets'}]); renderFilteredPage(st.filter);
+    } else if(st.page==='dashboard'){
+      setBc([]); renderDashboard();
+    } else {
+      const lbls={chronologie:'Chronologie',etab:"Projet d'Établissement",clubs:'Clubs & Activités',
+        internat:"Projets de l'Internat",admin:'Administration',tutoriel:'Tutoriels',mentions:'Mentions légales'};
+      setBc([{l:lbls[st.page]||st.page}]);
+      const mc=document.getElementById('mc');
+      switch(st.page){
+        case 'chronologie': renderChronologie(mc); break;
+        case 'etab': renderEtab(mc); break;
+        case 'clubs': renderClubs(mc); break;
+        case 'internat': renderInternat(mc); break;
+        case 'admin': renderAdmin(mc); break;
+        case 'tutoriel': renderTutoriel(mc); break;
+        case 'mentions': renderMentions(mc); break;
+        default: showDashboard();
+      }
+    }
+  } else {
+    showDashboard();
+  }
+  _skipPush=false;
+});
+
+/* ═══════════════════════════════════════════════════════════
    BREADCRUMB
 ═══════════════════════════════════════════════════════════ */
 function setBc(items){
@@ -1678,7 +1731,7 @@ async function doConfirmReset(token){
 function showDashboard(){
   checkSessionExpiry();
   S.page='dashboard'; S.filter=null; S.search=''; S.statusFilter='all';
-  setBc([]); renderDashboard();
+  setBc([]); renderDashboard(); navPush();
 }
 
 function renderDashboard(){
@@ -1834,7 +1887,7 @@ function renderDashboard(){
 function goCategory(cat){
   checkSessionExpiry();
   S.page='category'; S.filter=cat; S.search=''; S.statusFilter='all';
-  setBc([{l:cat}]); renderCatPage(cat);
+  setBc([{l:cat}]); renderCatPage(cat); navPush();
 }
 
 function renderCatPage(cat){
@@ -1888,7 +1941,7 @@ function goFiltered(sf){
   checkSessionExpiry();
   S.page='filtered'; S.filter=sf; S.search=''; S.statusFilter='all';
   const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
-  setBc([{l:labels[sf]||'Projets'}]); renderFilteredPage(sf);
+  setBc([{l:labels[sf]||'Projets'}]); renderFilteredPage(sf); navPush();
 }
 function renderFilteredPage(sf){
   const mc=document.getElementById('mc');
@@ -1951,7 +2004,7 @@ function goDetail(id){
   if(!p) return;
   S.sel=p; S.page='detail';
   setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]);
-  renderDetail(p);
+  renderDetail(p); navPush();
 }
 
 function renderDetail(p){
@@ -2014,7 +2067,7 @@ function renderDetail(p){
       <div class="detail-actions">
         ${cEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>`:''}
         ${cDel?`<button class="btn btn-danger" onclick="delProject('${p.ID_Projet}')">🗑️ Supprimer</button>`:''}
-        <button class="btn btn-back" onclick="history.go(-1)">← Retour</button>
+        <button class="btn btn-back" onclick="history.back()">← Retour</button>
       </div>
     </div>`;
 }
@@ -2291,6 +2344,7 @@ function showPage(pg){
     case 'tutoriel':    renderTutoriel(mc); break;
     case 'mentions':    renderMentions(mc); break;
   }
+  navPush();
 }
 
 /* CHRONOLOGIE */
@@ -2754,6 +2808,8 @@ async function init(){
     window.history.replaceState({},document.title,window.location.pathname);
     openResetForm(resetToken);
   }
+  // État initial dans l'historique
+  history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname);
   renderDashboard();
 }
 init();
