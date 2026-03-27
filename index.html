@@ -892,12 +892,12 @@ nav {
 .fg-pw { position:relative; }
 .fg-pw input { padding-right:2.6rem; }
 .pw-eye {
-  position:absolute; right:.6rem; top:50%; transform:translateY(-50%);
-  background:none; border:none; cursor:pointer; padding:.2rem;
-  color:var(--t3); font-size:1.05rem; line-height:1;
-  transition:color var(--dur) var(--ease);
+  position:absolute; right:.55rem; top:50%; transform:translateY(-50%);
+  background:none; border:none; cursor:pointer; padding:.25rem;
+  line-height:0; opacity:.3; transition:opacity var(--dur) var(--ease);
 }
-.pw-eye:hover { color:var(--t1); }
+.pw-eye:hover { opacity:.55; }
+.pw-eye svg { width:18px; height:18px; stroke:#64748b; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Multi-select niveaux dropdown */
 .niv-wrap { position:relative; }
@@ -1633,7 +1633,7 @@ function openLogin(){
     <div class="fg"><label>Adresse email</label>
       <input type="email" id="a-em" placeholder="prenom.nom@egd.mg" autocomplete="username"></div>
     <div class="fg"><label>Mot de passe</label>
-      <div class="fg-pw"><input type="password" id="a-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
+      <div class="fg-pw"><input type="password" id="a-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
     <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doLogin()">Se connecter</button>
     <div class="modal-links">
       <span class="modal-link" onclick="openRegister()">Créer un compte</span>
@@ -1651,8 +1651,8 @@ function openRegister(){
     </div>
     <div class="fg"><label>Email @egd.mg</label><input type="email" id="r-em" placeholder="jean.dupont@egd.mg"></div>
     <div class="fg-row">
-      <div class="fg"><label>Mot de passe</label><div class="fg-pw"><input type="password" id="r-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
-      <div class="fg"><label>Confirmer</label><div class="fg-pw"><input type="password" id="r-p2" placeholder="Répéter"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
+      <div class="fg"><label>Mot de passe</label><div class="fg-pw"><input type="password" id="r-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      <div class="fg"><label>Confirmer</label><div class="fg-pw"><input type="password" id="r-p2" placeholder="Répéter"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
     </div>
     <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doRegister()">Créer mon compte</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
@@ -1674,9 +1674,9 @@ function openResetForm(token){
     <div class="msg-info">Choisissez un nouveau mot de passe (min. 6 caractères).</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
-      <div class="fg-pw"><input type="password" id="f-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
+      <div class="fg-pw"><input type="password" id="f-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
     <div class="fg"><label>Confirmer</label>
-      <div class="fg-pw"><input type="password" id="f-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doConfirmReset('${token}')"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
+      <div class="fg-pw"><input type="password" id="f-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doConfirmReset('${token}')"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
     <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doConfirmReset('${token}')">Enregistrer</button>`;
 }
 function closeAuth(){ document.getElementById('auth-ov').classList.remove('open'); }
@@ -2645,7 +2645,7 @@ async function renderAdmin(mc){
           </div>
           <div style="margin:.3rem 0"><label style="font-size:.7rem;color:var(--t3)">Email @egd.mg</label><input class="admin-input" type="email" id="nu-em" placeholder="jean.dupont@egd.mg" style="width:100%;margin-top:.2rem"></div>
           <div class="fg-row" style="gap:.5rem;margin:.3rem 0">
-            <div class="fg" style="flex:1"><label style="font-size:.7rem">Mot de passe</label><div class="fg-pw"><input class="admin-input" type="password" id="nu-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher">👁️</button></div></div>
+            <div class="fg" style="flex:1"><label style="font-size:.7rem">Mot de passe</label><div class="fg-pw"><input class="admin-input" type="password" id="nu-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
             <div class="fg" style="flex:1"><label style="font-size:.7rem">Rôle</label>
               <select class="admin-input" id="nu-ro">
                 <option value="enseignant">Enseignant</option>
@@ -2793,11 +2793,13 @@ function renderMentions(mc){
    UTILS
 ═══════════════════════════════════════════════════════════ */
 function v(id){ const el=document.getElementById(id); return el?el.value.trim():''; }
+const _eyeOn='<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _eyeOff='<svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 function togglePw(btn){
   const inp=btn.parentElement.querySelector('input');
   const show=inp.type==='password';
   inp.type=show?'text':'password';
-  btn.textContent=show?'🙈':'👁️';
+  btn.innerHTML=show?_eyeOff:_eyeOn;
   btn.title=show?'Masquer':'Afficher';
 }
 function esc(s){ return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
