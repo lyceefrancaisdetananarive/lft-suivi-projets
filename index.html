@@ -176,13 +176,16 @@ nav {
   display:flex; align-items:center; gap:.85rem;
   cursor:pointer; flex-shrink:0;
 }
-.nav-logo {
-  width:64px; height:64px; border-radius:50%;
-  overflow:hidden; border:2.5px solid rgba(255,255,255,.85);
-  background:var(--aefe-blue); flex-shrink:0;
-  box-shadow:0 3px 12px rgba(0,53,163,.18), 0 0 0 4px rgba(0,83,163,.06);
+.nav-logo-aefe {
+  height:48px; flex-shrink:0;
+  padding:4px 8px;
+  background:rgba(255,255,255,.85);
+  border-radius:var(--r-sm);
+  border:1px solid rgba(255,255,255,.7);
+  box-shadow:0 2px 8px rgba(0,30,80,.06);
+  display:flex; align-items:center;
 }
-.nav-logo img { width:100%; height:100%; object-fit:cover; }
+.nav-logo-aefe img { height:100%; width:auto; object-fit:contain; }
 .nav-wordmark { line-height:1.25; }
 .nav-wordmark strong {
   display:block; font-family:'Marianne',arial,sans-serif;
@@ -315,18 +318,17 @@ nav {
 }
 .hero-content { position:relative; z-index:1; }
 .hero-top {
-  display:flex; flex-direction:column; align-items:center;
-  gap:.6rem; margin-bottom:1.75rem; text-align:center;
+  display:flex; flex-direction:row; align-items:center;
+  gap:2rem; margin-bottom:1.75rem; text-align:left;
 }
 .hero-logo {
-  width:120px; height:120px; border-radius:50%;
-  overflow:hidden; border:3px solid rgba(255,255,255,.3);
+  width:130px; height:130px; border-radius:50%;
+  overflow:hidden; border:3px solid rgba(255,255,255,.25);
   background:var(--aefe-blue); flex-shrink:0;
-  box-shadow:0 6px 24px rgba(0,0,0,.25), 0 0 0 6px rgba(255,255,255,.08);
-  margin-bottom:.4rem;
+  box-shadow:0 8px 32px rgba(0,0,0,.3), 0 0 0 6px rgba(255,255,255,.08);
 }
 .hero-logo img { width:100%; height:100%; object-fit:cover; }
-.hero-tagline {}
+.hero-tagline { flex:1; }
 .hero-school-name {
   font-family:'Marianne',arial,sans-serif !important;
   font-size:clamp(1rem,2.2vw,1.35rem) !important; font-weight:800 !important;
@@ -1201,12 +1203,13 @@ footer a:hover { color:var(--aefe-magenta); }
   .proj-grid  { grid-template-columns:1fr; }
   .fg-row     { grid-template-columns:1fr; }
   .hero       { padding:1.5rem 1.1rem 1.3rem; }
-  .hero-logo  { width:80px; height:80px; border-width:2px; box-shadow:0 4px 16px rgba(0,0,0,.2), 0 0 0 4px rgba(255,255,255,.06); }
-  .hero-school-name { letter-spacing:.06em !important; }
+  .hero-top   { gap:1rem; }
+  .hero-logo  { width:85px; height:85px; border-width:2px; box-shadow:0 4px 16px rgba(0,0,0,.2), 0 0 0 4px rgba(255,255,255,.06); }
+  .hero-school-name { letter-spacing:.06em !important; font-size:.85rem !important; }
   .hero-tagline h1 { font-size:1.3rem; }
-  .nav-inner  { height:68px; }
-  .nav-logo   { width:48px; height:48px; }
-  .nav-wordmark strong { font-size:.9rem; }
+  .nav-inner  { height:64px; }
+  .nav-logo-aefe { height:38px; padding:3px 6px; }
+  .nav-wordmark strong { font-size:.85rem; }
   .dash-tile .tile-watermark { font-size:4.5rem; right:-4px; }
   .hstat-num  { font-size:1.4rem; }
   .hero-stats { gap:.5rem; }
@@ -1236,8 +1239,8 @@ footer a:hover { color:var(--aefe-magenta); }
 <nav>
   <div class="nav-inner">
     <div class="nav-brand" onclick="showDashboard()">
-      <div class="nav-logo">
-        <img src="logo-lft.jpg" alt="LFT" onerror="this.parentNode.innerHTML='🏫'">
+      <div class="nav-logo-aefe">
+        <img src="logo_aefe_egd.png" alt="AEFE EGD" onerror="this.parentNode.innerHTML='🏫'">
       </div>
       <div class="nav-wordmark">
         <strong>Lycée français de Tananarive</strong>
