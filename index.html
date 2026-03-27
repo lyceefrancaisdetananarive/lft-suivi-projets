@@ -6,8 +6,15 @@
 <title>LFT — Suivi des projets de l'établissement 2025–2026</title>
 <link rel="icon" type="image/jpeg" href="logo-lft.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
 <style>
+/* ── Marianne (self-hosted) ── */
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-Light.woff2') format('woff2'); font-weight:300; font-style:normal; font-display:swap; }
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-Regular_Italic.woff2') format('woff2'); font-weight:400; font-style:italic; font-display:swap; }
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-Medium.woff2') format('woff2'); font-weight:500; font-style:normal; font-display:swap; }
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-Bold.woff2') format('woff2'); font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:'Marianne'; src:url('fonts/Marianne-ExtraBold.woff2') format('woff2'); font-weight:800; font-style:normal; font-display:swap; }
 /* ═══════════════════════════════════════
    DESIGN TOKENS
 ═══════════════════════════════════════ */
@@ -76,7 +83,7 @@
 *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
 html { scroll-behavior:smooth; font-size:15px; }
 body {
-  font-family:'Inter',system-ui,sans-serif;
+  font-family:'Marianne',arial,sans-serif;
   background:#e8edf5;
   color:var(--t0);
   min-height:100vh;
@@ -163,27 +170,27 @@ nav {
 .nav-inner {
   max-width:1280px; margin:0 auto;
   display:flex; align-items:center; gap:1rem;
-  height:64px; padding:0 1.5rem;
+  height:80px; padding:0 1.5rem;
 }
 .nav-brand {
-  display:flex; align-items:center; gap:.75rem;
+  display:flex; align-items:center; gap:.85rem;
   cursor:pointer; flex-shrink:0;
 }
 .nav-logo {
-  width:40px; height:40px; border-radius:50%;
-  overflow:hidden; border:2px solid rgba(255,255,255,.8);
+  width:64px; height:64px; border-radius:50%;
+  overflow:hidden; border:2.5px solid rgba(255,255,255,.85);
   background:var(--aefe-blue); flex-shrink:0;
-  box-shadow:0 2px 8px rgba(0,53,163,.2);
+  box-shadow:0 3px 12px rgba(0,53,163,.18), 0 0 0 4px rgba(0,83,163,.06);
 }
 .nav-logo img { width:100%; height:100%; object-fit:cover; }
-.nav-wordmark { line-height:1.2; }
+.nav-wordmark { line-height:1.25; }
 .nav-wordmark strong {
-  display:block; font-family:'Fraunces',Georgia,serif;
-  font-weight:700; font-size:1rem; color:var(--t0);
-  letter-spacing:-.01em;
+  display:block; font-family:'Marianne',arial,sans-serif;
+  font-weight:700; font-size:1.05rem; color:var(--t0);
+  letter-spacing:.01em;
 }
 .nav-wordmark span {
-  font-size:.68rem; color:var(--t2); font-weight:400;
+  font-size:.7rem; color:var(--t2); font-weight:400;
   letter-spacing:.02em;
 }
 .nav-sep { flex:1; }
@@ -292,9 +299,24 @@ nav {
   display:flex; flex-direction:column; align-items:center;
   gap:.6rem; margin-bottom:1.75rem; text-align:center;
 }
+.hero-logo {
+  width:120px; height:120px; border-radius:50%;
+  overflow:hidden; border:3px solid rgba(255,255,255,.3);
+  background:var(--aefe-blue); flex-shrink:0;
+  box-shadow:0 6px 24px rgba(0,0,0,.25), 0 0 0 6px rgba(255,255,255,.08);
+  margin-bottom:.4rem;
+}
+.hero-logo img { width:100%; height:100%; object-fit:cover; }
 .hero-tagline {}
+.hero-school-name {
+  font-family:'Marianne',arial,sans-serif !important;
+  font-size:clamp(1rem,2.2vw,1.35rem) !important; font-weight:800 !important;
+  color:rgba(255,255,255,.82) !important; letter-spacing:.12em !important;
+  margin-bottom:.25rem !important; text-transform:uppercase;
+  -webkit-text-fill-color:rgba(255,255,255,.82) !important; background:none !important;
+}
 .hero-tagline h1 {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:clamp(1.7rem,3.5vw,2.3rem); font-weight:700;
   color:#fff; line-height:1.15; letter-spacing:-.025em;
 }
@@ -331,7 +353,7 @@ nav {
   box-shadow:0 8px 28px rgba(0,0,0,.3);
 }
 .hstat-num {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1.9rem; font-weight:700;
   line-height:1; display:block; color:#fff;
 }
@@ -348,11 +370,11 @@ nav {
   gap:1rem; margin-bottom:1.1rem; flex-wrap:wrap;
 }
 .sec-title {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1.15rem; font-weight:700; color:var(--t0);
   display:flex; align-items:center; gap:.5rem;
 }
-.sec-title span { font-size:.72rem; font-family:'Inter',sans-serif; font-weight:500; color:var(--t2); margin-left:.2rem; }
+.sec-title span { font-size:.72rem; font-family:'Marianne',arial,sans-serif; font-weight:500; color:var(--t2); margin-left:.2rem; }
 .sec-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 
 /* ═══════════════════════════════════════
@@ -386,7 +408,7 @@ nav {
 /* Description courte sous le titre */
 .tile-desc {
   font-size:.76rem; color:var(--t2); margin:.05rem 0 0;
-  font-family:'Inter',sans-serif; line-height:1.45;
+  font-family:'Marianne',arial,sans-serif; line-height:1.45;
 }
 /* Badges multiples dans une tuile */
 .tile-chips { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.35rem; }
@@ -435,7 +457,7 @@ nav {
 
 .tile-icon { font-size:2rem; line-height:1; margin-bottom:.1rem; }
 .tile-name {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1rem; font-weight:700; color:var(--t0); line-height:1.25;
 }
 .tile-accent .tile-name { color:#fff; }
@@ -533,7 +555,7 @@ nav {
 .pcard-body { padding:.8rem .85rem; flex:1; }
 .pcard-id { font-size:.62rem; color:var(--t3); font-weight:600; letter-spacing:.05em; margin-bottom:.2rem; }
 .pcard-title {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.92rem; font-weight:700; color:var(--t0);
   line-height:1.3; margin-bottom:.35rem;
 }
@@ -576,7 +598,7 @@ nav {
 .detail-banner > * { position:relative; z-index:1; }
 .detail-id { font-size:.75rem; color:rgba(255,255,255,.5); font-weight:600; margin-bottom:.3rem; }
 .detail-title {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:clamp(1.2rem,3vw,1.7rem); font-weight:700; color:#fff; margin-bottom:.8rem;
 }
 .detail-meta { display:flex; gap:.5rem; flex-wrap:wrap; }
@@ -600,7 +622,7 @@ nav {
 }
 .dblock.full { grid-column:1/-1; }
 .dblock h3 {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.88rem; font-weight:700; color:var(--t0);
   margin-bottom:.6rem; display:flex; align-items:center; gap:.4rem;
 }
@@ -618,7 +640,7 @@ nav {
   border:1px solid rgba(0,83,163,.25);
 }
 .axe-num { font-size:.68rem; font-weight:700; color:var(--aefe-blue); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.2rem; }
-.axe-ttl { font-family:'Fraunces',Georgia,serif; font-size:.9rem; font-weight:700; color:var(--t0); margin-bottom:.5rem; }
+.axe-ttl { font-family:'Spectral',Georgia,serif; font-size:.9rem; font-weight:700; color:var(--t0); margin-bottom:.5rem; }
 .axe-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
 .axe-chip {
   font-size:.68rem; font-weight:500; padding:.18rem .55rem;
@@ -639,7 +661,7 @@ nav {
 }
 .tl-month { margin-bottom:2rem; }
 .tl-month-hd {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.9rem; font-weight:700; color:var(--t0);
   margin-bottom:.75rem; display:inline-flex; align-items:center; gap:.4rem;
   background:rgba(255,255,255,.55); border:1px solid rgba(255,255,255,.6);
@@ -688,13 +710,13 @@ nav {
   box-shadow:0 2px 8px rgba(0,30,80,.04), inset 0 1px 0 rgba(255,255,255,.7);
 }
 .info-card h2 {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1.05rem; font-weight:700; color:var(--t0);
   margin-bottom:.75rem; padding-bottom:.6rem;
   border-bottom:1px solid var(--b1);
 }
 .info-card h3 {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.88rem; font-weight:700; color:var(--t0);
   margin:.9rem 0 .4rem;
 }
@@ -715,11 +737,11 @@ nav {
 }
 .admin-card.full { grid-column:1/-1; }
 .admin-card-hd {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.9rem; font-weight:700; color:var(--t0);
   margin-bottom:.85rem; display:flex; align-items:center; justify-content:space-between;
 }
-.admin-card-hd small { font-size:.72rem; font-family:'Inter',sans-serif; font-weight:400; color:var(--t3); }
+.admin-card-hd small { font-size:.72rem; font-family:'Marianne',arial,sans-serif; font-weight:400; color:var(--t3); }
 
 .row-item {
   display:flex; align-items:center; justify-content:space-between;
@@ -785,7 +807,7 @@ nav {
 }
 .modal.modal-lg { max-width:660px; }
 .modal h2 {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1.2rem; font-weight:700; color:var(--t0); margin-bottom:1.2rem;
 }
 .modal-close {
@@ -940,7 +962,7 @@ nav {
   box-shadow:0 8px 32px rgba(0,30,80,.08), 0 24px 64px rgba(0,53,163,.06),
              inset 0 1px 0 rgba(255,255,255,.9);
 }
-#confirm-box h3 { font-family:'Fraunces',Georgia,serif; font-size:1.1rem; font-weight:700; color:var(--t0); margin-bottom:.5rem; }
+#confirm-box h3 { font-family:'Spectral',Georgia,serif; font-size:1.1rem; font-weight:700; color:var(--t0); margin-bottom:.5rem; }
 #confirm-box p  { font-size:.84rem; color:var(--t2); margin-bottom:1.2rem; line-height:1.5; }
 .confirm-btns { display:flex; gap:.65rem; }
 .confirm-btns button { flex:1; padding:.55rem; border-radius:var(--r-md); border:none; cursor:pointer; font-weight:700; font-size:.85rem; transition:all var(--dur) var(--ease); }
@@ -961,7 +983,7 @@ footer {
   -webkit-backdrop-filter:blur(16px) saturate(160%);
 }
 footer .footer-brand {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-weight:700; font-size:1rem; color:var(--aefe-blue);
   display:block; margin-bottom:.3rem;
 }
@@ -975,7 +997,7 @@ footer a:hover { color:var(--aefe-magenta); }
 /* Section header avec bordure gauche (style doc officiel) */
 .pe-section { margin-bottom:1.6rem; }
 .pe-section-hd {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1rem; font-weight:700; color:var(--t0);
   text-transform:uppercase; letter-spacing:.05em;
   padding:.1rem 0 .7rem .9rem;
@@ -995,7 +1017,7 @@ footer a:hover { color:var(--aefe-magenta); }
   color:rgba(0,163,255,.85); margin-bottom:.45rem;
 }
 .pe-title {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:clamp(1.1rem,2.5vw,1.55rem); font-weight:700;
   color:var(--t0); line-height:1.2; margin-bottom:.3rem;
 }
@@ -1008,7 +1030,7 @@ footer a:hover { color:var(--aefe-magenta); }
   border-radius:var(--r-lg); min-width:85px; text-align:center;
 }
 .pe-kpi-n {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:1.5rem; font-weight:700; color:#fff; line-height:1;
 }
 .pe-kpi-l { font-size:.66rem; color:var(--t2); margin-top:.2rem; font-weight:500; }
@@ -1030,7 +1052,7 @@ footer a:hover { color:var(--aefe-magenta); }
   border-radius:var(--r-lg); padding:1.1rem 1.2rem;
 }
 .swot-card .swot-hd {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.88rem; font-weight:700; margin-bottom:.6rem;
 }
 .swot-card ul { font-size:.79rem; color:var(--t1); padding-left:1rem; line-height:1.8; margin:0; }
@@ -1054,13 +1076,13 @@ footer a:hover { color:var(--aefe-magenta); }
 .axe-num-badge {
   width:40px; height:40px; border-radius:50%; flex-shrink:0;
   display:flex; align-items:center; justify-content:center;
-  font-family:'Fraunces',Georgia,serif; font-size:1.15rem; font-weight:700; color:#fff;
+  font-family:'Spectral',Georgia,serif; font-size:1.15rem; font-weight:700; color:#fff;
 }
 .axe-d1 .axe-num-badge { background:var(--aefe-blue); }
 .axe-d2 .axe-num-badge { background:#16a34a; }
 .axe-d3 .axe-num-badge { background:var(--aefe-magenta); }
 .axe-detail-title {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.98rem; font-weight:700; color:var(--t0); line-height:1.3; padding-top:.1rem;
 }
 .axe-detail-grid {
@@ -1101,7 +1123,7 @@ footer a:hover { color:var(--aefe-magenta); }
 .club-icon { font-size:1.8rem; line-height:1; flex-shrink:0; padding-top:.1rem; }
 .club-content { flex:1; }
 .club-name {
-  font-family:'Fraunces',Georgia,serif;
+  font-family:'Spectral',Georgia,serif;
   font-size:.93rem; font-weight:700; color:var(--t0); margin-bottom:.2rem;
 }
 .club-since {
@@ -1136,7 +1158,12 @@ footer a:hover { color:var(--aefe-magenta); }
   .proj-grid  { grid-template-columns:1fr; }
   .fg-row     { grid-template-columns:1fr; }
   .hero       { padding:1.5rem 1.1rem 1.3rem; }
+  .hero-logo  { width:80px; height:80px; border-width:2px; box-shadow:0 4px 16px rgba(0,0,0,.2), 0 0 0 4px rgba(255,255,255,.06); }
+  .hero-school-name { letter-spacing:.06em !important; }
   .hero-tagline h1 { font-size:1.3rem; }
+  .nav-inner  { height:68px; }
+  .nav-logo   { width:48px; height:48px; }
+  .nav-wordmark strong { font-size:.9rem; }
   .hstat-num  { font-size:1.4rem; }
   .hero-stats { gap:.5rem; }
   .hstat      { padding:.65rem .9rem; min-width:80px; }
@@ -1614,8 +1641,11 @@ function renderDashboard(){
       <div class="hero-bg-img"></div>
       <div class="hero-content">
         <div class="hero-top">
+          <div class="hero-logo">
+            <img src="logo-lft.jpg" alt="Logo LFT" onerror="this.style.display='none'">
+          </div>
           <div class="hero-tagline">
-            <h1 style="font-size:clamp(1.1rem,2.5vw,1.5rem);font-weight:500;color:rgba(255,255,255,.75);letter-spacing:.03em;margin-bottom:.3rem">LYCÉE FRANÇAIS DE TANANARIVE</h1>
+            <h1 class="hero-school-name">LYCÉE FRANÇAIS DE TANANARIVE</h1>
             <h1>Suivi des <em>projets de l'établissement</em></h1>
             <p>Établissement en gestion directe de l'AEFE · Année scolaire 2025–2026</p>
           </div>
@@ -2514,9 +2544,9 @@ async function renderAdmin(mc){
           <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.5rem">
             ${Object.entries(CATS).map(([cat,i])=>{
               const cnt=S.projects.filter(p=>p.Categorie===cat).length;
-              return `<div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.65rem;color:var(--t3)">${cat}</div></div>`;
+              return `<div style="text-align:center"><div style="font-family:'Spectral',Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.65rem;color:var(--t3)">${cat}</div></div>`;
             }).join('')}
-            <div style="text-align:center"><div style="font-family:'Fraunces',serif;font-size:1.5rem;font-weight:700;color:var(--aefe-blue)">${S.projects.length}</div><div style="font-size:.65rem;color:var(--t3)">Total</div></div>
+            <div style="text-align:center"><div style="font-family:'Spectral',Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--aefe-blue)">${S.projects.length}</div><div style="font-size:.65rem;color:var(--t3)">Total</div></div>
           </div>
         </div>
         <div class="admin-card full">
