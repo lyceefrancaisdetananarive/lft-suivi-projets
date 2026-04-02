@@ -1,31 +1,28 @@
 /**
  * ============================================================
- * LFT - Suivi des Projets d'Etablissement - v5
+ * LFT - Suivi des Projets d'Etablissement - v6 (SECURISE)
  * Google Apps Script - API Backend
  * Lycee Francais de Tananarive - AEFE
  * ============================================================
  *
+ * SECURITE v6 :
+ * - Authentification par token de session (UUID, expire 8h)
+ * - Plus de mot de passe dans les URL (GET)
+ * - Toutes les actions sensibles passent par POST
+ * - Verification des roles cote serveur sur chaque action
+ *
  * ONGLETS REQUIS :
- * - "Projets"          (27 colonnes v5 : +Deleted, Deleted_By, Deleted_Date, Locked, Locked_By, Locked_Date, Last_Modified_By, Last_Modified_Date)
- * - "Utilisateurs"     (9 colonnes)
+ * - "Projets"          (27 colonnes)
+ * - "Utilisateurs"     (11 colonnes : +Session_Token, Session_Expiry)
  * - "Emails_Autorises" (1 colonne)
  * - "Logs"             (10 colonnes)
- * - "Commentaires"     (5 colonnes : ID_Projet, Date_Heure, Email, Nom_Prenom, Commentaire)
+ * - "Commentaires"     (5 colonnes)
  *
  * ROLES :
- * - admin        : Tout (projets, utilisateurs, logs, corbeille, verrouillage)
- * - direction    : CRUD tous projets, corbeille, verrouillage, commentaires
+ * - admin        : Tout
+ * - direction    : CRUD tous projets, corbeille, verrouillage
  * - vie_scolaire : CRUD "Clubs et activites" + "Projets de l'Internat"
- * - enseignant   : cree, modifie et supprime (corbeille) SES projets uniquement
- *
- * FONCTIONNALITES v5 :
- * - Corbeille (soft delete) avec restauration
- * - Suppression definitive (admin/direction)
- * - Verrouillage de projet (admin/direction)
- * - Commentaires sur les projets
- * - Notifications email (suppression/restauration)
- * - Audit : Last_Modified_By/Date sur chaque modification
- * - Export CSV
+ * - enseignant   : cree, modifie et supprime SES projets uniquement
  */
 
 var PROJETS_SHEET  = 'Projets';
@@ -35,8 +32,8 @@ var LOGS_SHEET     = 'Logs';
 var COMMENTS_SHEET = 'Commentaires';
 var ADMIN_EMAIL    = 'max.rafaliarison@aefe.fr';
 var APP_URL        = 'https://lyceefrancaisdetananarive.github.io/lft-suivi-projets/';
+var SESSION_HOURS  = 8;
 
-// Categories accessibles a la Vie scolaire
 var VS_CATS = ['Clubs et activités', "Projets de l'Internat"];
 
 // ============================================================
@@ -72,6 +69,10 @@ function nowStr() {
   return Utilities.formatDate(new Date(), 'Indian/Antananarivo', 'yyyy-MM-dd HH:mm:ss');
 }
 
+// ============================================================
+// AUTHENTIFICATION PAR MOT DE PASSE (login uniquement)
+// ============================================================
+
 function authenticate(email, password) {
   if (!email || !password) return null;
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
@@ -86,15 +87,106 @@ function authenticate(email, password) {
   var firstIdx   = headers.indexOf('First_Login');
   var hashed = hashPassword(password);
   for (var i = 1; i < data.length; i++) {
-    if (data[i][emailIdx] === email && data[i][passIdx] === hashed) {
+    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase().trim() === email.toLowerCase().trim()
+        && data[i][passIdx] === hashed) {
       return {
-        email:       data[i][emailIdx],
-        role:        data[i][roleIdx],
-        nom:         data[i][nomIdx],
-        prenom:      data[i][prenomIdx],
-        first_login: firstIdx >= 0 ? (data[i][firstIdx].toString() === '1') : false
+        email:       data[i][emailIdx].toString(),
+        role:        data[i][roleIdx] ? data[i][roleIdx].toString() : 'enseignant',
+        nom:         data[i][nomIdx] ? data[i][nomIdx].toString() : '',
+        prenom:      data[i][prenomIdx] ? data[i][prenomIdx].toString() : '',
+        first_login: firstIdx >= 0 ? (data[i][firstIdx].toString() === '1') : false,
+        _row:        i + 1
       };
     }
+  }
+  return null;
+}
+
+// ============================================================
+// AUTHENTIFICATION PAR TOKEN DE SESSION (toutes les requetes)
+// ============================================================
+
+function authenticateByToken(token) {
+  if (!token) return null;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) return null;
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var emailIdx   = headers.indexOf('Email');
+  var roleIdx    = headers.indexOf('Role');
+  var nomIdx     = headers.indexOf('Nom');
+  var prenomIdx  = headers.indexOf('Prenom');
+  var firstIdx   = headers.indexOf('First_Login');
+  var tokenIdx   = headers.indexOf('Session_Token');
+  var expiryIdx  = headers.indexOf('Session_Expiry');
+
+  if (tokenIdx < 0 || expiryIdx < 0) return null;
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][tokenIdx] && data[i][tokenIdx].toString().trim() === token) {
+      var expiry = parseInt(data[i][expiryIdx].toString());
+      if (isNaN(expiry) || new Date().getTime() > expiry) {
+        // Token expire : on le nettoie
+        sheet.getRange(i + 1, tokenIdx + 1).setValue('');
+        sheet.getRange(i + 1, expiryIdx + 1).setValue('');
+        return null;
+      }
+      return {
+        email:       data[i][emailIdx] ? data[i][emailIdx].toString() : '',
+        role:        data[i][roleIdx] ? data[i][roleIdx].toString() : 'enseignant',
+        nom:         data[i][nomIdx] ? data[i][nomIdx].toString() : '',
+        prenom:      data[i][prenomIdx] ? data[i][prenomIdx].toString() : '',
+        first_login: firstIdx >= 0 ? (data[i][firstIdx].toString() === '1') : false,
+        _row:        i + 1
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Cree un token de session pour un utilisateur
+ * Retourne le token UUID
+ */
+function createSession(email) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) return null;
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var emailIdx   = headers.indexOf('Email');
+  var tokenIdx   = headers.indexOf('Session_Token');
+  var expiryIdx  = headers.indexOf('Session_Expiry');
+
+  if (tokenIdx < 0 || expiryIdx < 0) return null;
+
+  var token  = Utilities.getUuid();
+  var expiry = new Date().getTime() + SESSION_HOURS * 60 * 60 * 1000;
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase().trim() === email.toLowerCase().trim()) {
+      sheet.getRange(i + 1, tokenIdx + 1).setValue(token);
+      sheet.getRange(i + 1, expiryIdx + 1).setValue(expiry.toString());
+      return token;
+    }
+  }
+  return null;
+}
+
+/**
+ * Helper : authentifie par token OU par email+password (fallback pour premiere connexion)
+ */
+function getAuthUser(e) {
+  // Essayer le token d'abord
+  var token = e.parameter.token || '';
+  if (token) {
+    var user = authenticateByToken(token);
+    if (user) return user;
+  }
+  // Fallback email+password (pour change-password premiere connexion)
+  var email = (e.parameter.email || '').trim().toLowerCase();
+  var password = e.parameter.password || '';
+  if (email && password) {
+    return authenticate(email, password);
   }
   return null;
 }
@@ -173,48 +265,25 @@ function extractDeviceInfo(e) {
   return { pays: p.d_pays || '', ville: p.d_ville || '', os: p.d_os || '', navigateur: p.d_nav || '', appareil: p.d_app || '' };
 }
 
-/**
- * Envoie une notification email a l'enseignant referent d'un projet
- */
 function notifyProjectOwner(ownerEmail, projectName, projectId, actionType, actorEmail) {
   try {
-    if (!ownerEmail || ownerEmail === actorEmail) return; // pas de notif si c'est soi-meme
+    if (!ownerEmail || ownerEmail === actorEmail) return;
     var subject, body;
     if (actionType === 'delete') {
       subject = 'LFT Projets - Votre projet a ete place en corbeille';
-      body = 'Bonjour,\n\n'
-        + 'Votre projet "' + projectName + '" (' + projectId + ') a ete place en corbeille par ' + actorEmail + '.\n\n'
-        + 'Si cette action n\'est pas volontaire, contactez l\'administrateur ou la direction pour le restaurer.\n\n'
-        + 'Plateforme : ' + APP_URL + '\n\n'
-        + 'Cordialement,\nSysteme automatique - LFT Projets';
+      body = 'Bonjour,\n\nVotre projet "' + projectName + '" (' + projectId + ') a ete place en corbeille par ' + actorEmail + '.\n\nSi cette action n\'est pas volontaire, contactez l\'administrateur ou la direction pour le restaurer.\n\nPlateforme : ' + APP_URL + '\n\nCordialement,\nSysteme automatique - LFT Projets';
     } else if (actionType === 'restore') {
       subject = 'LFT Projets - Votre projet a ete restaure';
-      body = 'Bonjour,\n\n'
-        + 'Votre projet "' + projectName + '" (' + projectId + ') a ete restaure par ' + actorEmail + '.\n'
-        + 'Il est de nouveau visible sur la plateforme.\n\n'
-        + 'Plateforme : ' + APP_URL + '\n\n'
-        + 'Cordialement,\nSysteme automatique - LFT Projets';
+      body = 'Bonjour,\n\nVotre projet "' + projectName + '" (' + projectId + ') a ete restaure par ' + actorEmail + '.\nIl est de nouveau visible sur la plateforme.\n\nPlateforme : ' + APP_URL + '\n\nCordialement,\nSysteme automatique - LFT Projets';
     } else if (actionType === 'permanent-delete') {
       subject = 'LFT Projets - Votre projet a ete supprime definitivement';
-      body = 'Bonjour,\n\n'
-        + 'Votre projet "' + projectName + '" (' + projectId + ') a ete supprime definitivement par ' + actorEmail + '.\n'
-        + 'Cette action est irreversible.\n\n'
-        + 'Plateforme : ' + APP_URL + '\n\n'
-        + 'Cordialement,\nSysteme automatique - LFT Projets';
+      body = 'Bonjour,\n\nVotre projet "' + projectName + '" (' + projectId + ') a ete supprime definitivement par ' + actorEmail + '.\nCette action est irreversible.\n\nPlateforme : ' + APP_URL + '\n\nCordialement,\nSysteme automatique - LFT Projets';
     } else if (actionType === 'lock') {
       subject = 'LFT Projets - Votre projet a ete valide et verrouille';
-      body = 'Bonjour,\n\n'
-        + 'Votre projet "' + projectName + '" (' + projectId + ') a ete valide et verrouille par ' + actorEmail + '.\n'
-        + 'Il ne peut plus etre modifie. Contactez la direction si des modifications sont necessaires.\n\n'
-        + 'Plateforme : ' + APP_URL + '\n\n'
-        + 'Cordialement,\nSysteme automatique - LFT Projets';
+      body = 'Bonjour,\n\nVotre projet "' + projectName + '" (' + projectId + ') a ete valide et verrouille par ' + actorEmail + '.\nIl ne peut plus etre modifie. Contactez la direction si des modifications sont necessaires.\n\nPlateforme : ' + APP_URL + '\n\nCordialement,\nSysteme automatique - LFT Projets';
     } else if (actionType === 'unlock') {
       subject = 'LFT Projets - Votre projet a ete deverrouille';
-      body = 'Bonjour,\n\n'
-        + 'Votre projet "' + projectName + '" (' + projectId + ') a ete deverrouille par ' + actorEmail + '.\n'
-        + 'Vous pouvez de nouveau le modifier.\n\n'
-        + 'Plateforme : ' + APP_URL + '\n\n'
-        + 'Cordialement,\nSysteme automatique - LFT Projets';
+      body = 'Bonjour,\n\nVotre projet "' + projectName + '" (' + projectId + ') a ete deverrouille par ' + actorEmail + '.\nVous pouvez de nouveau le modifier.\n\nPlateforme : ' + APP_URL + '\n\nCordialement,\nSysteme automatique - LFT Projets';
     }
     if (subject && body) {
       MailApp.sendEmail({ to: ownerEmail, subject: subject, body: body });
@@ -223,25 +292,16 @@ function notifyProjectOwner(ownerEmail, projectName, projectId, actionType, acto
 }
 
 // ============================================================
-// ROUTING
+// ROUTING v6 — GET = lecture seule, POST = tout le reste
 // ============================================================
 
 function doGet(e) {
   try {
     switch (e.parameter.action) {
-      case 'login':              return handleLogin(e);
-      case 'list':               return handleList(e);
-      case 'list-trash':         return handleListTrash(e);
-      case 'delete':             return handleDelete(e);
-      case 'permanent-delete':   return handlePermanentDelete(e);
-      case 'list-emails':        return handleListEmails(e);
-      case 'delete-email':       return handleDeleteEmail(e);
-      case 'forgot-password':    return handleForgotPassword(e);
-      case 'request-deletion':   return handleRequestDeletion(e);
-      case 'get-logs':           return handleGetLogs(e);
-      case 'list-comments':      return handleListComments(e);
-      case 'export':             return handleExport(e);
-      default: return jsonResponse({ success: false, error: 'Action non reconnue' });
+      case 'list':           return handleList(e);
+      case 'list-comments':  return handleListComments(e);
+      case 'export':         return handleExport(e);
+      default: return jsonResponse({ success: false, error: 'Action non reconnue (GET)' });
     }
   } catch (err) { return jsonResponse({ success: false, error: err.toString() }); }
 }
@@ -249,41 +309,70 @@ function doGet(e) {
 function doPost(e) {
   try {
     switch (e.parameter.action) {
-      case 'add':                  return handleAdd(e);
-      case 'update':               return handleUpdate(e);
+      // Auth
+      case 'login':                return handleLogin(e);
       case 'register':             return handleRegister(e);
+      case 'forgot-password':      return handleForgotPassword(e);
       case 'confirm-reset':        return handleConfirmReset(e);
-      case 'add-email':            return handleAddEmail(e);
-      case 'change-role':          return handleChangeRole(e);
       case 'change-password':      return handleChangePassword(e);
       case 'admin-reset-password': return handleAdminResetPassword(e);
+      // Projets
+      case 'add':                  return handleAdd(e);
+      case 'update':               return handleUpdate(e);
+      case 'delete':               return handleDelete(e);
+      case 'permanent-delete':     return handlePermanentDelete(e);
       case 'restore':              return handleRestore(e);
       case 'lock-project':         return handleLockProject(e);
       case 'unlock-project':       return handleUnlockProject(e);
+      // Commentaires
       case 'add-comment':          return handleAddComment(e);
-      default: return jsonResponse({ success: false, error: 'Action non reconnue' });
+      // Admin
+      case 'list-trash':           return handleListTrash(e);
+      case 'get-logs':             return handleGetLogs(e);
+      case 'list-emails':          return handleListEmails(e);
+      case 'add-email':            return handleAddEmail(e);
+      case 'delete-email':         return handleDeleteEmail(e);
+      case 'change-role':          return handleChangeRole(e);
+      case 'request-deletion':     return handleRequestDeletion(e);
+      // Liste utilisateurs (admin)
+      case 'list-users':           return handleListUsers(e);
+      default: return jsonResponse({ success: false, error: 'Action non reconnue (POST)' });
     }
   } catch (err) { return jsonResponse({ success: false, error: err.toString() }); }
 }
 
 // ============================================================
-// AUTH : LOGIN
+// AUTH : LOGIN (seule action qui utilise email+password)
 // ============================================================
 
 function handleLogin(e) {
-  var email = (e.parameter.email || '').trim().toLowerCase();
+  var body  = JSON.parse(e.postData.contents);
+  var email = (body.email || '').trim().toLowerCase();
+  var pwd   = body.password || '';
   var di    = extractDeviceInfo(e);
-  var user  = authenticate(email, e.parameter.password);
+
+  var user = authenticate(email, pwd);
   if (!user) {
     addLog(email, '', 'login_fail', 'Identifiants incorrects', di);
     return jsonResponse({ success: false, error: 'Identifiants incorrects' });
   }
+
+  // Creer un token de session
+  var token = createSession(email);
+  if (!token) {
+    return jsonResponse({ success: false, error: 'Erreur creation session' });
+  }
+
   addLog(user.email, user.role, 'login', 'Connexion reussie', di);
-  return jsonResponse({ success: true, user: user });
+  return jsonResponse({
+    success: true,
+    token: token,
+    user: { email: user.email, role: user.role, nom: user.nom, prenom: user.prenom, first_login: user.first_login }
+  });
 }
 
 // ============================================================
-// AUTH : REGISTER (style Pronote)
+// AUTH : REGISTER
 // ============================================================
 
 function handleRegister(e) {
@@ -307,9 +396,18 @@ function handleRegister(e) {
   var password = generatePassword();
   var sheet    = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
   var hashed   = hashPassword(password);
-  sheet.appendRow([email, hashed, 'enseignant', nom, prenom, '', '', password, '1']);
+  sheet.appendRow([email, hashed, 'enseignant', nom, prenom, '', '', password, '1', '', '']);
   addLog(email, 'enseignant', 'register', 'Nouveau compte: ' + prenom + ' ' + nom, di);
-  return jsonResponse({ success: true, message: 'Compte cree avec succes !', generated_password: password, user: { email: email, role: 'enseignant', nom: nom, prenom: prenom, first_login: true } });
+
+  // Creer le token de session immediatement
+  var token = createSession(email);
+
+  return jsonResponse({
+    success: true, message: 'Compte cree avec succes !',
+    generated_password: password,
+    token: token,
+    user: { email: email, role: 'enseignant', nom: nom, prenom: prenom, first_login: true }
+  });
 }
 
 // ============================================================
@@ -318,20 +416,17 @@ function handleRegister(e) {
 
 function handleChangePassword(e) {
   var body        = JSON.parse(e.postData.contents);
-  var email       = (e.parameter.email || '').trim().toLowerCase();
-  var oldPassword = e.parameter.password || '';
   var newPassword = body.new_password || '';
   var di          = extractDeviceInfo(e);
 
-  var user = authenticate(email, oldPassword);
-  if (!user) return jsonResponse({ success: false, error: 'Mot de passe actuel incorrect' });
+  // Auth par token OU par email+password (premiere connexion)
+  var user = getAuthUser(e);
+  if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   if (!newPassword || newPassword.length < 8)
     return jsonResponse({ success: false, error: 'Le nouveau mot de passe doit contenir au moins 8 caracteres' });
   if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword))
     return jsonResponse({ success: false, error: 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre' });
-  if (newPassword === oldPassword)
-    return jsonResponse({ success: false, error: 'Le nouveau mot de passe doit etre different de l\'ancien' });
 
   var sheet   = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
   var data    = sheet.getDataRange().getValues();
@@ -342,12 +437,19 @@ function handleChangePassword(e) {
   var initIdx  = headers.indexOf('Mdp_Initial');
 
   for (var i = 1; i < data.length; i++) {
-    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase() === email) {
+    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase() === user.email.toLowerCase()) {
       sheet.getRange(i + 1, passIdx + 1).setValue(hashPassword(newPassword));
       if (firstIdx >= 0) sheet.getRange(i + 1, firstIdx + 1).setValue('0');
       if (initIdx >= 0) sheet.getRange(i + 1, initIdx + 1).setValue('');
-      addLog(email, user.role, 'change_password', 'Mot de passe modifie' + (user.first_login ? ' (premiere connexion)' : ''), di);
-      return jsonResponse({ success: true, message: 'Mot de passe modifie avec succes !', user: { email: user.email, role: user.role, nom: user.nom, prenom: user.prenom, first_login: false } });
+      addLog(user.email, user.role, 'change_password', 'Mot de passe modifie' + (user.first_login ? ' (premiere connexion)' : ''), di);
+
+      // Generer un nouveau token de session
+      var newToken = createSession(user.email);
+      return jsonResponse({
+        success: true, message: 'Mot de passe modifie avec succes !',
+        token: newToken,
+        user: { email: user.email, role: user.role, nom: user.nom, prenom: user.prenom, first_login: false }
+      });
     }
   }
   return jsonResponse({ success: false, error: 'Utilisateur introuvable' });
@@ -358,7 +460,7 @@ function handleChangePassword(e) {
 // ============================================================
 
 function handleAdminResetPassword(e) {
-  var admin = authenticate(e.parameter.email, e.parameter.password);
+  var admin = getAuthUser(e);
   if (!isAdmin(admin)) return jsonResponse({ success: false, error: 'Admin requis' });
 
   var body        = JSON.parse(e.postData.contents);
@@ -393,7 +495,7 @@ function handleAdminResetPassword(e) {
         + 'Vous serez invite(e) a choisir un nouveau mot de passe personnel lors de votre prochaine connexion.\n\n'
         + 'Cordialement,\nL\'equipe LFT';
       MailApp.sendEmail({ to: targetEmail, subject: 'LFT Projets - Reinitialisation de votre mot de passe', body: mailBody });
-      addLog(e.parameter.email, admin.role, 'admin_reset_password', 'Reinitialisation mdp: ' + targetEmail, di);
+      addLog(admin.email, admin.role, 'admin_reset_password', 'Reinitialisation mdp: ' + targetEmail, di);
       return jsonResponse({ success: true, message: 'Mot de passe reinitialise et envoye par email a ' + targetEmail });
     }
   }
@@ -405,7 +507,8 @@ function handleAdminResetPassword(e) {
 // ============================================================
 
 function handleForgotPassword(e) {
-  var email = (e.parameter.email || '').trim().toLowerCase();
+  var body  = JSON.parse(e.postData.contents);
+  var email = (body.email || '').trim().toLowerCase();
   var di    = extractDeviceInfo(e);
   if (!email.endsWith('@egd.mg'))
     return jsonResponse({ success: false, error: 'Adresse email invalide' });
@@ -488,33 +591,24 @@ function handleConfirmReset(e) {
 // ============================================================
 
 function handleRequestDeletion(e) {
-  var email    = (e.parameter.email    || '').trim().toLowerCase();
-  var password = (e.parameter.password || '');
-  var user     = authenticate(email, password);
+  var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   MailApp.sendEmail({
     to: ADMIN_EMAIL,
-    subject: 'LFT Projets - Demande de suppression de compte : ' + email,
-    body: 'Un utilisateur a demande la suppression de son compte.\n\n- Email : ' + email + '\n- Nom : ' + (user.prenom || '') + ' ' + (user.nom || '') + '\n- Role : ' + (user.role || '') + '\n- Date : ' + nowStr()
+    subject: 'LFT Projets - Demande de suppression de compte : ' + user.email,
+    body: 'Un utilisateur a demande la suppression de son compte.\n\n- Email : ' + user.email + '\n- Nom : ' + (user.prenom || '') + ' ' + (user.nom || '') + '\n- Role : ' + (user.role || '') + '\n- Date : ' + nowStr()
   });
-  addLog(email, user.role, 'request_deletion', 'Demande de suppression envoyee');
+  addLog(user.email, user.role, 'request_deletion', 'Demande de suppression envoyee');
   return jsonResponse({ success: true, message: "Demande envoyee a l'administrateur." });
 }
 
 // ============================================================
-// LIST PROJECTS (exclut les supprimes)
+// LIST PROJECTS (GET, public, exclut les supprimes)
 // ============================================================
 
 function handleList(e) {
-  var table = e.parameter.table || PROJETS_SHEET;
-
-  if (table === USERS_SHEET) {
-    var user = authenticate(e.parameter.email, e.parameter.password);
-    if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse' });
-  }
-
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data = sheet.getDataRange().getValues();
@@ -524,19 +618,12 @@ function handleList(e) {
   var deletedIdx = headers.indexOf('Deleted');
   var results = [];
   for (var i = 1; i < data.length; i++) {
-    // Exclure les projets supprimes (Deleted = 1)
-    if (table === PROJETS_SHEET && deletedIdx >= 0 && data[i][deletedIdx] && data[i][deletedIdx].toString() === '1') continue;
-
+    if (deletedIdx >= 0 && data[i][deletedIdx] && data[i][deletedIdx].toString() === '1') continue;
     var row = {};
     for (var j = 0; j < headers.length; j++) {
       var val = data[i][j];
       if (val instanceof Date) val = Utilities.formatDate(val, 'Indian/Antananarivo', 'yyyy-MM-dd');
       row[headers[j]] = val !== undefined && val !== null ? val.toString() : '';
-    }
-    if (table === USERS_SHEET) {
-      delete row['Mot_de_Passe'];
-      delete row['Reset_Token'];
-      delete row['Reset_Expiry'];
     }
     results.push(row);
   }
@@ -544,11 +631,45 @@ function handleList(e) {
 }
 
 // ============================================================
-// LIST TRASH (admin/direction uniquement)
+// LIST USERS (POST, admin uniquement)
+// ============================================================
+
+function handleListUsers(e) {
+  var user = getAuthUser(e);
+  if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin uniquement' });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return jsonResponse({ success: true, data: [] });
+
+  var headers = data[0];
+  var results = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = data[i][j];
+      if (val instanceof Date) val = Utilities.formatDate(val, 'Indian/Antananarivo', 'yyyy-MM-dd');
+      row[headers[j]] = val !== undefined && val !== null ? val.toString() : '';
+    }
+    // Ne JAMAIS renvoyer le mot de passe, le token, les reset tokens
+    delete row['Mot_de_Passe'];
+    delete row['Reset_Token'];
+    delete row['Reset_Expiry'];
+    delete row['Session_Token'];
+    delete row['Session_Expiry'];
+    results.push(row);
+  }
+  return jsonResponse({ success: true, data: results });
+}
+
+// ============================================================
+// LIST TRASH (POST, admin/direction)
 // ============================================================
 
 function handleListTrash(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!canManageTrash(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin/Direction uniquement' });
 
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
@@ -575,14 +696,16 @@ function handleListTrash(e) {
 }
 
 // ============================================================
-// DELETE (soft delete → corbeille + notification)
+// DELETE (soft delete, POST)
 // ============================================================
 
 function handleDelete(e) {
-  var table = e.parameter.table || PROJETS_SHEET;
-  var user  = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
   var di = extractDeviceInfo(e);
+
+  var body  = JSON.parse(e.postData.contents);
+  var table = body.table || PROJETS_SHEET;
 
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
@@ -591,7 +714,7 @@ function handleDelete(e) {
   var headers = data[0];
 
   if (table === PROJETS_SHEET) {
-    var targetId     = e.parameter.id;
+    var targetId     = body.id || '';
     var idIdx        = headers.indexOf('ID_Projet');
     var nomIdx       = headers.indexOf('Nom_Projet');
     var catIdx       = headers.indexOf('Categorie');
@@ -606,25 +729,20 @@ function handleDelete(e) {
         var projectCat = data[i][catIdx] ? data[i][catIdx].toString() : '';
         var nomProjet  = data[i][nomIdx] ? data[i][nomIdx].toString() : targetId;
 
-        // Permissions :
-        // - Admin/Direction : peut supprimer tout
-        // - Vie scolaire : peut supprimer dans ses categories
-        // - Enseignant : peut supprimer SES propres projets
         if (isVieScolaire(user)) {
           if (!isVsCat(projectCat))
             return jsonResponse({ success: false, error: 'Vie scolaire : suppression limitee a vos categories' });
         } else if (!isAdminOrDirection(user)) {
-          if (owner !== e.parameter.email)
+          if (owner !== user.email)
             return jsonResponse({ success: false, error: 'Vous ne pouvez supprimer que vos propres projets' });
         }
 
-        // Soft delete
         if (deletedIdx >= 0) sheet.getRange(i + 1, deletedIdx + 1).setValue('1');
-        if (delByIdx >= 0)   sheet.getRange(i + 1, delByIdx + 1).setValue(e.parameter.email);
+        if (delByIdx >= 0)   sheet.getRange(i + 1, delByIdx + 1).setValue(user.email);
         if (delDateIdx >= 0) sheet.getRange(i + 1, delDateIdx + 1).setValue(nowStr());
 
-        addLog(e.parameter.email, user.role, 'delete_project', 'Corbeille: ' + targetId + ' - ' + nomProjet, di);
-        notifyProjectOwner(owner, nomProjet, targetId, 'delete', e.parameter.email);
+        addLog(user.email, user.role, 'delete_project', 'Corbeille: ' + targetId + ' - ' + nomProjet, di);
+        notifyProjectOwner(owner, nomProjet, targetId, 'delete', user.email);
         return jsonResponse({ success: true, message: 'Projet place en corbeille' });
       }
     }
@@ -634,13 +752,13 @@ function handleDelete(e) {
   // Suppression utilisateur (hard delete, admin uniquement)
   if (table === USERS_SHEET) {
     if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
-    var targetEmail = e.parameter.email_target;
-    if (targetEmail === e.parameter.email) return jsonResponse({ success: false, error: 'Impossible de supprimer votre propre compte' });
+    var targetEmail = body.email_target || '';
+    if (targetEmail.toLowerCase() === user.email.toLowerCase()) return jsonResponse({ success: false, error: 'Impossible de supprimer votre propre compte' });
     var emailIdx = headers.indexOf('Email');
     for (var i = 1; i < data.length; i++) {
-      if (data[i][emailIdx] === targetEmail) {
+      if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase() === targetEmail.toLowerCase()) {
         sheet.deleteRow(i + 1);
-        addLog(e.parameter.email, user.role, 'delete_user', 'Suppression compte: ' + targetEmail, di);
+        addLog(user.email, user.role, 'delete_user', 'Suppression compte: ' + targetEmail, di);
         return jsonResponse({ success: true, message: 'Supprime' });
       }
     }
@@ -651,11 +769,11 @@ function handleDelete(e) {
 }
 
 // ============================================================
-// RESTORE (restaurer depuis la corbeille + notification)
+// RESTORE (POST, admin/direction)
 // ============================================================
 
 function handleRestore(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!canManageTrash(user)) return jsonResponse({ success: false, error: 'Admin/Direction requis' });
   var di = extractDeviceInfo(e);
 
@@ -683,8 +801,8 @@ function handleRestore(e) {
       if (delByIdx >= 0)   sheet.getRange(i + 1, delByIdx + 1).setValue('');
       if (delDateIdx >= 0) sheet.getRange(i + 1, delDateIdx + 1).setValue('');
 
-      addLog(e.parameter.email, user.role, 'restore_project', 'Restaure: ' + targetId + ' - ' + nomProjet, di);
-      notifyProjectOwner(owner, nomProjet, targetId, 'restore', e.parameter.email);
+      addLog(user.email, user.role, 'restore_project', 'Restaure: ' + targetId + ' - ' + nomProjet, di);
+      notifyProjectOwner(owner, nomProjet, targetId, 'restore', user.email);
       return jsonResponse({ success: true, message: 'Projet restaure avec succes' });
     }
   }
@@ -692,15 +810,17 @@ function handleRestore(e) {
 }
 
 // ============================================================
-// PERMANENT DELETE (suppression definitive + notification)
+// PERMANENT DELETE (POST, admin/direction)
 // ============================================================
 
 function handlePermanentDelete(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!canManageTrash(user)) return jsonResponse({ success: false, error: 'Admin/Direction requis' });
   var di = extractDeviceInfo(e);
 
-  var targetId = e.parameter.id;
+  var body     = JSON.parse(e.postData.contents);
+  var targetId = (body.id || '').trim();
+
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
@@ -716,8 +836,8 @@ function handlePermanentDelete(e) {
       var nomProjet = data[i][nomIdx] ? data[i][nomIdx].toString() : targetId;
 
       sheet.deleteRow(i + 1);
-      addLog(e.parameter.email, user.role, 'permanent_delete', 'Supprime definitivement: ' + targetId + ' - ' + nomProjet, di);
-      notifyProjectOwner(owner, nomProjet, targetId, 'permanent-delete', e.parameter.email);
+      addLog(user.email, user.role, 'permanent_delete', 'Supprime definitivement: ' + targetId + ' - ' + nomProjet, di);
+      notifyProjectOwner(owner, nomProjet, targetId, 'permanent-delete', user.email);
       return jsonResponse({ success: true, message: 'Projet supprime definitivement' });
     }
   }
@@ -725,11 +845,11 @@ function handlePermanentDelete(e) {
 }
 
 // ============================================================
-// LOCK / UNLOCK PROJECT (admin/direction)
+// LOCK / UNLOCK PROJECT (POST, admin/direction)
 // ============================================================
 
 function handleLockProject(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdminOrDirection(user)) return jsonResponse({ success: false, error: 'Admin/Direction requis' });
   var di = extractDeviceInfo(e);
 
@@ -751,10 +871,10 @@ function handleLockProject(e) {
       var owner     = data[i][createdByIdx] ? data[i][createdByIdx].toString() : '';
       var nomProjet = data[i][nomIdx] ? data[i][nomIdx].toString() : targetId;
       if (lockedIdx >= 0)   sheet.getRange(i + 1, lockedIdx + 1).setValue('1');
-      if (lockByIdx >= 0)   sheet.getRange(i + 1, lockByIdx + 1).setValue(e.parameter.email);
+      if (lockByIdx >= 0)   sheet.getRange(i + 1, lockByIdx + 1).setValue(user.email);
       if (lockDateIdx >= 0) sheet.getRange(i + 1, lockDateIdx + 1).setValue(nowStr());
-      addLog(e.parameter.email, user.role, 'lock_project', 'Verrouille: ' + targetId + ' - ' + nomProjet, di);
-      notifyProjectOwner(owner, nomProjet, targetId, 'lock', e.parameter.email);
+      addLog(user.email, user.role, 'lock_project', 'Verrouille: ' + targetId + ' - ' + nomProjet, di);
+      notifyProjectOwner(owner, nomProjet, targetId, 'lock', user.email);
       return jsonResponse({ success: true, message: 'Projet verrouille' });
     }
   }
@@ -762,7 +882,7 @@ function handleLockProject(e) {
 }
 
 function handleUnlockProject(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdminOrDirection(user)) return jsonResponse({ success: false, error: 'Admin/Direction requis' });
   var di = extractDeviceInfo(e);
 
@@ -786,8 +906,8 @@ function handleUnlockProject(e) {
       if (lockedIdx >= 0)   sheet.getRange(i + 1, lockedIdx + 1).setValue('');
       if (lockByIdx >= 0)   sheet.getRange(i + 1, lockByIdx + 1).setValue('');
       if (lockDateIdx >= 0) sheet.getRange(i + 1, lockDateIdx + 1).setValue('');
-      addLog(e.parameter.email, user.role, 'unlock_project', 'Deverrouille: ' + targetId + ' - ' + nomProjet, di);
-      notifyProjectOwner(owner, nomProjet, targetId, 'unlock', e.parameter.email);
+      addLog(user.email, user.role, 'unlock_project', 'Deverrouille: ' + targetId + ' - ' + nomProjet, di);
+      notifyProjectOwner(owner, nomProjet, targetId, 'unlock', user.email);
       return jsonResponse({ success: true, message: 'Projet deverrouille' });
     }
   }
@@ -799,7 +919,7 @@ function handleUnlockProject(e) {
 // ============================================================
 
 function handleAddComment(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
   var di = extractDeviceInfo(e);
 
@@ -848,13 +968,12 @@ function handleListComments(e) {
       results.push(row);
     }
   }
-  // Plus recents en premier
   results.reverse();
   return jsonResponse({ success: true, data: results });
 }
 
 // ============================================================
-// EXPORT (CSV)
+// EXPORT (GET, CSV)
 // ============================================================
 
 function handleExport(e) {
@@ -865,7 +984,6 @@ function handleExport(e) {
   var headers = data[0];
   var deletedIdx = headers.indexOf('Deleted');
 
-  // Colonnes a exporter (exclure les colonnes techniques)
   var excludeCols = ['Deleted', 'Deleted_By', 'Deleted_Date', 'Locked_By', 'Locked_Date', 'Last_Modified_By', 'Last_Modified_Date'];
   var exportIdx = [];
   var exportHeaders = [];
@@ -884,7 +1002,6 @@ function handleExport(e) {
       var val = data[i][exportIdx[k]];
       if (val instanceof Date) val = Utilities.formatDate(val, 'Indian/Antananarivo', 'yyyy-MM-dd');
       val = val !== undefined && val !== null ? val.toString() : '';
-      // Echapper les guillemets et le point-virgule
       if (val.indexOf(';') >= 0 || val.indexOf('"') >= 0 || val.indexOf('\n') >= 0) {
         val = '"' + val.replace(/"/g, '""') + '"';
       }
@@ -897,11 +1014,11 @@ function handleExport(e) {
 }
 
 // ============================================================
-// GET LOGS
+// GET LOGS (POST, admin)
 // ============================================================
 
 function handleGetLogs(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin uniquement' });
 
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LOGS_SHEET);
@@ -924,11 +1041,11 @@ function handleGetLogs(e) {
 }
 
 // ============================================================
-// CHANGE ROLE
+// CHANGE ROLE (POST, admin)
 // ============================================================
 
 function handleChangeRole(e) {
-  var admin = authenticate(e.parameter.email, e.parameter.password);
+  var admin = getAuthUser(e);
   if (!isAdmin(admin)) return jsonResponse({ success: false, error: 'Admin requis' });
 
   var body        = JSON.parse(e.postData.contents);
@@ -937,7 +1054,7 @@ function handleChangeRole(e) {
 
   if (['admin', 'direction', 'vie_scolaire', 'enseignant'].indexOf(newRole) < 0)
     return jsonResponse({ success: false, error: 'Role invalide' });
-  if (targetEmail === e.parameter.email.trim().toLowerCase())
+  if (targetEmail === admin.email.toLowerCase())
     return jsonResponse({ success: false, error: 'Vous ne pouvez pas changer votre propre role' });
 
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
@@ -952,7 +1069,7 @@ function handleChangeRole(e) {
     if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase() === targetEmail) {
       var oldRole = data[i][roleIdx].toString();
       sheet.getRange(i + 1, roleIdx + 1).setValue(newRole);
-      addLog(e.parameter.email, admin.role, 'change_role', targetEmail + ': ' + oldRole + ' -> ' + newRole);
+      addLog(admin.email, admin.role, 'change_role', targetEmail + ': ' + oldRole + ' -> ' + newRole);
       return jsonResponse({ success: true, message: 'Role modifie : ' + oldRole + ' -> ' + newRole });
     }
   }
@@ -960,11 +1077,11 @@ function handleChangeRole(e) {
 }
 
 // ============================================================
-// EMAILS AUTORISES
+// EMAILS AUTORISES (POST, admin)
 // ============================================================
 
 function handleListEmails(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse' });
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMAILS_SHEET);
   if (!sheet) return jsonResponse({ success: true, data: [] });
@@ -977,7 +1094,7 @@ function handleListEmails(e) {
 }
 
 function handleAddEmail(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse' });
   var body     = JSON.parse(e.postData.contents);
   var newEmail = (body.email || body.Email || '').trim().toLowerCase();
@@ -987,21 +1104,22 @@ function handleAddEmail(e) {
     return jsonResponse({ success: false, error: 'Cette adresse est deja dans la liste' });
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMAILS_SHEET);
   sheet.appendRow([newEmail]);
-  addLog(e.parameter.email, user.role, 'add_email', 'Ajout email autorise: ' + newEmail);
+  addLog(user.email, user.role, 'add_email', 'Ajout email autorise: ' + newEmail);
   return jsonResponse({ success: true, message: 'Email ajoute a la liste' });
 }
 
 function handleDeleteEmail(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse' });
-  var targetEmail = (e.parameter.target || e.parameter.email_target || '').trim().toLowerCase();
+  var body        = JSON.parse(e.postData.contents);
+  var targetEmail = (body.target || '').trim().toLowerCase();
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMAILS_SHEET);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] && data[i][0].toString().toLowerCase().trim() === targetEmail) {
       sheet.deleteRow(i + 1);
-      addLog(e.parameter.email, user.role, 'delete_email', 'Suppression email autorise: ' + targetEmail);
+      addLog(user.email, user.role, 'delete_email', 'Suppression email autorise: ' + targetEmail);
       return jsonResponse({ success: true, message: 'Email supprime de la liste' });
     }
   }
@@ -1009,16 +1127,18 @@ function handleDeleteEmail(e) {
 }
 
 // ============================================================
-// ADD
+// ADD (POST)
 // ============================================================
 
 function handleAdd(e) {
-  var table = e.parameter.table || PROJETS_SHEET;
-  var user  = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
-  if (table === USERS_SHEET && !isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
 
   var body  = JSON.parse(e.postData.contents);
+  var table = body._table || PROJETS_SHEET;
+
+  if (table === USERS_SHEET && !isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
+
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
@@ -1028,16 +1148,16 @@ function handleAdd(e) {
     if (isVieScolaire(user) && !isVsCat(body['Categorie']))
       return jsonResponse({ success: false, error: 'Vie scolaire : creation limitee a vos categories' });
     body['ID_Projet']          = generateProjectId(body['Categorie']);
-    body['Created_By']         = e.parameter.email;
+    body['Created_By']         = user.email;
     body['Deleted']            = '';
     body['Deleted_By']         = '';
     body['Deleted_Date']       = '';
     body['Locked']             = '';
     body['Locked_By']          = '';
     body['Locked_Date']        = '';
-    body['Last_Modified_By']   = e.parameter.email;
+    body['Last_Modified_By']   = user.email;
     body['Last_Modified_Date'] = nowStr();
-    addLog(e.parameter.email, user.role, 'add_project', 'Nouveau projet: ' + (body['Nom_Projet'] || '') + ' (' + body['ID_Projet'] + ')');
+    addLog(user.email, user.role, 'add_project', 'Nouveau projet: ' + (body['Nom_Projet'] || '') + ' (' + body['ID_Projet'] + ')');
   }
 
   if (table === USERS_SHEET) {
@@ -1046,9 +1166,11 @@ function handleAdd(e) {
     body['Mdp_Initial']  = plainPwd;
     body['First_Login']  = '1';
     if (emailAlreadyRegistered(body['Email'])) return jsonResponse({ success: false, error: 'Email deja utilise' });
-    body['Reset_Token']  = '';
-    body['Reset_Expiry'] = '';
-    addLog(e.parameter.email, user.role, 'add_user', 'Creation utilisateur: ' + body['Email'] + ' (' + (body['Role'] || 'enseignant') + ')');
+    body['Reset_Token']    = '';
+    body['Reset_Expiry']   = '';
+    body['Session_Token']  = '';
+    body['Session_Expiry'] = '';
+    addLog(user.email, user.role, 'add_user', 'Creation utilisateur: ' + body['Email'] + ' (' + (body['Role'] || 'enseignant') + ')');
   }
 
   var newRow = headers.map(function(h) { return body[h] !== undefined ? body[h] : ''; });
@@ -1059,11 +1181,11 @@ function handleAdd(e) {
 }
 
 // ============================================================
-// UPDATE (avec audit trail + verification verrouillage)
+// UPDATE (POST, avec audit trail + verrouillage)
 // ============================================================
 
 function handleUpdate(e) {
-  var user = authenticate(e.parameter.email, e.parameter.password);
+  var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   var body  = JSON.parse(e.postData.contents);
@@ -1081,18 +1203,17 @@ function handleUpdate(e) {
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][idIdx] === body['ID_Projet']) {
-      // Verifier verrouillage
       if (lockedIdx >= 0 && data[i][lockedIdx] && data[i][lockedIdx].toString() === '1') {
         if (!isAdminOrDirection(user))
           return jsonResponse({ success: false, error: 'Ce projet est verrouille. Contactez la direction pour le modifier.' });
       }
 
-      var owner      = data[i][createdByIdx];
+      var owner      = data[i][createdByIdx] ? data[i][createdByIdx].toString() : '';
       var projectCat = data[i][catIdx] ? data[i][catIdx].toString() : '';
 
       if (isVieScolaire(user) && !isVsCat(projectCat))
         return jsonResponse({ success: false, error: 'Vie scolaire : modification limitee a vos categories' });
-      if (!isAdminOrDirection(user) && !isVieScolaire(user) && owner !== e.parameter.email)
+      if (!isAdminOrDirection(user) && !isVieScolaire(user) && owner !== user.email)
         return jsonResponse({ success: false, error: 'Vous ne pouvez modifier que vos propres projets' });
 
       for (var j = 0; j < headers.length; j++) {
@@ -1101,11 +1222,10 @@ function handleUpdate(e) {
         if (headers[j] === 'Last_Modified_By' || headers[j] === 'Last_Modified_Date') continue;
         if (body[headers[j]] !== undefined) sheet.getRange(i + 1, j + 1).setValue(body[headers[j]]);
       }
-      // Audit trail
-      if (lmByIdx >= 0)   sheet.getRange(i + 1, lmByIdx + 1).setValue(e.parameter.email);
+      if (lmByIdx >= 0)   sheet.getRange(i + 1, lmByIdx + 1).setValue(user.email);
       if (lmDateIdx >= 0) sheet.getRange(i + 1, lmDateIdx + 1).setValue(nowStr());
 
-      addLog(e.parameter.email, user.role, 'update_project', 'Modification: ' + body['ID_Projet'] + ' - ' + (body['Nom_Projet'] || ''));
+      addLog(user.email, user.role, 'update_project', 'Modification: ' + body['ID_Projet'] + ' - ' + (body['Nom_Projet'] || ''));
       return jsonResponse({ success: true, message: 'Modification reussie' });
     }
   }
@@ -1113,13 +1233,13 @@ function handleUpdate(e) {
 }
 
 // ============================================================
-// INITIALISATION v5
+// INITIALISATION v6
 // ============================================================
 
 function initializeSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Projets (27 colonnes v5)
+  // Projets (27 colonnes)
   var p = ss.getSheetByName(PROJETS_SHEET);
   if (!p) {
     p = ss.insertSheet(PROJETS_SHEET);
@@ -1138,19 +1258,19 @@ function initializeSheets() {
     }
   }
 
-  // Utilisateurs (9 colonnes)
+  // Utilisateurs (11 colonnes v6 : +Session_Token, Session_Expiry)
   var u = ss.getSheetByName(USERS_SHEET);
   if (!u) {
     u = ss.insertSheet(USERS_SHEET);
-    u.getRange(1, 1, 1, 9).setValues([['Email','Mot_de_Passe','Role','Nom','Prenom','Reset_Token','Reset_Expiry','Mdp_Initial','First_Login']]);
-    u.getRange(1, 1, 1, 9).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
+    u.getRange(1, 1, 1, 11).setValues([['Email','Mot_de_Passe','Role','Nom','Prenom','Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry']]);
+    u.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
     u.setFrozenRows(1);
     var adminPwd = generatePassword();
-    u.appendRow(['admin@egd.mg', hashPassword(adminPwd), 'admin', 'Administrateur', 'LFT', '', '', adminPwd, '1']);
+    u.appendRow(['admin@egd.mg', hashPassword(adminPwd), 'admin', 'Administrateur', 'LFT', '', '', adminPwd, '1', '', '']);
     Logger.log('Admin cree : admin@egd.mg / ' + adminPwd);
   } else {
     var existingH = u.getRange(1, 1, 1, u.getLastColumn()).getValues()[0];
-    var newCols = ['Reset_Token','Reset_Expiry','Mdp_Initial','First_Login'];
+    var newCols = ['Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry'];
     for (var c = 0; c < newCols.length; c++) {
       if (existingH.indexOf(newCols[c]) < 0) {
         var col = u.getLastColumn() + 1;
@@ -1186,7 +1306,7 @@ function initializeSheets() {
     }
   }
 
-  // Commentaires (5 colonnes)
+  // Commentaires
   var cs = ss.getSheetByName(COMMENTS_SHEET);
   if (!cs) {
     cs = ss.insertSheet(COMMENTS_SHEET);
@@ -1195,8 +1315,8 @@ function initializeSheets() {
     cs.setFrozenRows(1);
   }
 
-  Logger.log('=== Initialisation v5 terminee ! ===');
-  Logger.log('Nouvelles colonnes Projets : Deleted, Locked, Last_Modified_By/Date');
-  Logger.log('Nouvel onglet : Commentaires');
-  Logger.log('Vie scolaire : acces Clubs et activites + Projets de l\'Internat');
+  Logger.log('=== Initialisation v6 terminee ! ===');
+  Logger.log('Nouvelles colonnes Utilisateurs : Session_Token, Session_Expiry');
+  Logger.log('Toutes les actions sensibles passent par POST');
+  Logger.log('Authentification par token de session (8h)');
 }

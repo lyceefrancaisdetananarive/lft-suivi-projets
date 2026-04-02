@@ -6,10 +6,10 @@
 <title>LFT — Suivi des projets de l'établissement 2025–2026</title>
 <link rel="icon" type="image/jpeg" href="logo-lft.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/light/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/light/style.css" crossorigin="anonymous">
 <style>
 /* ── Marianne (self-hosted) ── */
 @font-face { font-family:'Marianne'; src:url('fonts/Marianne-Light.woff2') format('woff2'); font-weight:300; font-style:normal; font-display:swap; }
@@ -1495,13 +1495,15 @@ function loadSession(){
     if(u) S.user=JSON.parse(u);
   }catch(e){}
 }
-function saveSession(u){
+function saveSession(u, token){
   localStorage.setItem('lft_u',JSON.stringify(u));
   localStorage.setItem('lft_session_exp', Date.now() + 8*60*60*1000); // 8h
+  if(token) localStorage.setItem('lft_t', token);
 }
 function clearSession(){
   localStorage.removeItem('lft_u'); localStorage.removeItem('lft_e');
-  localStorage.removeItem('lft_p'); localStorage.removeItem('lft_session_exp');
+  localStorage.removeItem('lft_p'); localStorage.removeItem('lft_t');
+  localStorage.removeItem('lft_session_exp');
   S.user=null;
 }
 function checkSessionExpiry(){
@@ -1543,8 +1545,9 @@ function _devInfo(){
   const loc=tzMap[tz]||[tz.split('/')[0]||'',tz.split('/')[1]||''];
   return {d_pays:loc[0],d_ville:loc[1],d_os:os,d_nav:nav,d_app:app};
 }
+function _auth(){ return {token: localStorage.getItem('lft_t')||''}; }
 async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify(b),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
+async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._auth(),..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify(b||{}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
 
 async function loadProjects(){
   try {
@@ -1610,7 +1613,7 @@ async function requestAccountDeletion(){
     'Un email sera envoyé à l\'administrateur pour demander la suppression de votre compte. Continuer ?',
     async()=>{
       try {
-        const d=await apiGet({action:'request-deletion',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+        const d=await apiPost({action:'request-deletion'},{});
         toast(d.success?(d.message||'Demande envoyée.'):(d.error||'Erreur.'), d.success?'📧':'❌');
       } catch(e){ toast('Erreur réseau.','❌'); }
     });
@@ -1688,7 +1691,7 @@ function setBc(items){
 let _tt;
 function toast(msg,icon='ℹ️'){
   const t=document.getElementById('toast');
-  t.innerHTML=icon+' '+msg; t.style.display='block';
+  t.textContent=icon+' '+msg; t.style.display='block';
   clearTimeout(_tt); _tt=setTimeout(()=>t.style.display='none',3400);
 }
 
@@ -1767,14 +1770,15 @@ async function doLogin(){
   err.style.display='none';
   if(!em||!pw){ err.textContent='Champs obligatoires.'; err.style.display='block'; return; }
   try {
-    const d=await apiGet({action:'login',email:em,password:pw});
+    const d=await apiPost({action:'login'},{email:em,password:pw});
     if(d.success){
       if(d.user.first_login){
         // Première connexion → forcer le changement de mot de passe
-        openForceChangePassword(em,pw,d.user);
+        S._fcToken=d.token; S._fcEmail=em; S._fcUser=d.user;
+        openForceChangePassword(em,d.token,d.user);
       } else {
-        S.user=d.user; saveSession(d.user);
-        localStorage.setItem('lft_e',em); localStorage.setItem('lft_p',pw);
+        S.user=d.user; saveSession(d.user, d.token);
+        localStorage.setItem('lft_e',em);
         closeAuth(); updateHeader(); toast('Bienvenue '+(d.user.prenom||''),'👋'); renderCurrent();
       }
     } else { err.textContent=d.error||'Identifiants incorrects.'; err.style.display='block'; }
@@ -1782,10 +1786,10 @@ async function doLogin(){
 }
 
 /* Première connexion : changement de mot de passe obligatoire (style Pronote) */
-function openForceChangePassword(email,oldPw,userInfo){
+function openForceChangePassword(email,token,userInfo){
   document.getElementById('auth-body').innerHTML=`
     <h2><i class="ph ph-lock-key" style="vertical-align:middle"></i> Première connexion</h2>
-    <div class="msg-info">Bienvenue <strong>${userInfo.prenom||''} ${userInfo.nom||''}</strong> !<br>Pour des raisons de sécurité, vous devez choisir un nouveau mot de passe personnel.</div>
+    <div class="msg-info">Bienvenue <strong>${esc(userInfo.prenom||'')} ${esc(userInfo.nom||'')}</strong> !<br>Pour des raisons de sécurité, vous devez choisir un nouveau mot de passe personnel.</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
       <div class="fg-pw"><input type="password" id="cp-pw" placeholder="Min. 8 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
@@ -1793,8 +1797,8 @@ function openForceChangePassword(email,oldPw,userInfo){
     <div class="fg"><label>Confirmer le mot de passe</label>
       <div class="fg-pw"><input type="password" id="cp-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doForceChange()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
     <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForceChange()">Valider mon nouveau mot de passe</button>`;
-  // Stocker temporairement pour l'envoi
-  window._fcEmail=email; window._fcOldPw=oldPw; window._fcUser=userInfo;
+  // Stocker temporairement dans S (pas window)
+  S._fcEmail=email; S._fcToken=token; S._fcUser=userInfo;
 }
 
 async function doForceChange(){
@@ -1806,11 +1810,14 @@ async function doForceChange(){
   if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir au moins 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; return; }
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
   try {
-    const d=await apiPost({action:'change-password',email:window._fcEmail,password:window._fcOldPw},{new_password:pw});
+    // Utiliser le token reçu au login pour s'authentifier
+    const oldToken=S._fcToken||'';
+    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'change-password',token:oldToken,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({new_password:pw}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
+    const d=await r.json();
     if(d.success){
-      S.user=d.user||window._fcUser; S.user.first_login=false;
-      saveSession(S.user);
-      localStorage.setItem('lft_e',window._fcEmail); localStorage.setItem('lft_p',pw);
+      S.user=d.user||S._fcUser; S.user.first_login=false;
+      saveSession(S.user, d.token);
+      localStorage.setItem('lft_e',S._fcEmail);
       closeAuth(); updateHeader(); toast('Mot de passe modifié — bienvenue '+(S.user.prenom||'')+'!','🔐'); renderCurrent();
     } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
@@ -1827,7 +1834,7 @@ async function doRegister(){
       document.getElementById('reg-fields').style.display='none';
       ok.innerHTML=`<strong>Compte créé avec succès !</strong><br><br>
         Voici votre mot de passe provisoire :<br>
-        <span style="display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:rgba(0,83,163,.08);border:1px solid rgba(0,83,163,.2);border-radius:8px;font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--aefe-blue);letter-spacing:.1em;user-select:all">${d.generated_password}</span><br>
+        <span style="display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:rgba(0,83,163,.08);border:1px solid rgba(0,83,163,.2);border-radius:8px;font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--aefe-blue);letter-spacing:.1em;user-select:all">${esc(d.generated_password)}</span><br>
         <small style="color:var(--t2)">Notez-le précieusement. Vous devrez le modifier lors de votre première connexion.</small>`;
       ok.style.display='block';
     } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
@@ -1840,7 +1847,7 @@ async function doForgotPassword(){
   if(!em){ err.textContent='Veuillez saisir votre adresse email.'; err.style.display='block'; return; }
   if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
   try {
-    const d=await apiGet({action:'forgot-password',email:em});
+    const d=await apiPost({action:'forgot-password'},{email:em});
     if(d.success){ ok.textContent=d.message||'Email envoyé. Vérifiez votre boîte mail.'; ok.style.display='block'; }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
@@ -2127,19 +2134,19 @@ function renderGridFilt(c){
 function cardHTML(p){
   const ci=CATS[p.Categorie]||{cb:'cb-def'};
   const s=computeStatus(p);
-  return `<div class="pcard" onclick="goDetail('${p.ID_Projet}')">
+  return `<div class="pcard" onclick="goDetail('${esc(p.ID_Projet)}')">
     <div class="pcard-top">
-      <span class="cat-badge ${ci.cb}">${p.Categorie||''}</span>
+      <span class="cat-badge ${ci.cb}">${esc(p.Categorie||'')}</span>
       <span class="status-pill ${SC[s]}">${SL[s]||s}</span>
     </div>
     <div class="pcard-body">
-      <div class="pcard-id">${p.ID_Projet||''}</div>
-      <div class="pcard-title">${p.Nom_Projet||'Sans titre'}</div>
-      <div class="pcard-desc">${p.Description||''}</div>
+      <div class="pcard-id">${esc(p.ID_Projet||'')}</div>
+      <div class="pcard-title">${esc(p.Nom_Projet||'Sans titre')}</div>
+      <div class="pcard-desc">${esc(p.Description||'')}</div>
     </div>
     <div class="pcard-foot">
-      <span class="pcard-teacher">👤 ${p.Enseignant_Referent||'N/A'}</span>
-      <span class="pcard-prio pp-${(p.Priorite||'Moyenne').toLowerCase()}">${p.Priorite||'Moyenne'}</span>
+      <span class="pcard-teacher">👤 ${esc(p.Enseignant_Referent||'N/A')}</span>
+      <span class="pcard-prio pp-${(p.Priorite||'Moyenne').toLowerCase()}">${esc(p.Priorite||'Moyenne')}</span>
     </div>
   </div>`;
 }
@@ -2170,12 +2177,12 @@ function renderDetail(p){
     <div class="detail-wrap">
       <div class="detail-banner">
         <div class="detail-banner-bg"></div>
-        <div class="detail-id">${p.ID_Projet||''} · ${p.Categorie||''}${isLocked?' · <span class="lock-badge">🔒 Verrouillé</span>':''}</div>
-        <div class="detail-title">${p.Nom_Projet||'Sans titre'}</div>
+        <div class="detail-id">${esc(p.ID_Projet||'')} · ${esc(p.Categorie||'')}${isLocked?' · <span class="lock-badge">🔒 Verrouillé</span>':''}</div>
+        <div class="detail-title">${esc(p.Nom_Projet||'Sans titre')}</div>
         <div class="detail-meta">
           <span class="dmeta-chip">${SL[s]}</span>
-          <span class="dmeta-chip">${p.Priorite||'Moyenne'}</span>
-          ${p.Echelle?`<span class="dmeta-chip">${p.Echelle}</span>`:''}
+          <span class="dmeta-chip">${esc(p.Priorite||'Moyenne')}</span>
+          ${p.Echelle?`<span class="dmeta-chip">${esc(p.Echelle)}</span>`:''}
           ${p.Date_Debut?`<span class="dmeta-chip">📅 ${fmt(p.Date_Debut)} → ${fmt(p.Date_Fin)}</span>`:''}
         </div>
       </div>
@@ -2183,51 +2190,51 @@ function renderDetail(p){
       <div class="detail-grid">
         <div class="dblock full">
           <h3>📋 Description</h3>
-          <p>${p.Description||'Aucune description.'}</p>
+          <p>${esc(p.Description||'Aucune description.')}</p>
         </div>
         ${objs.length?`<div class="dblock full">
           <h3>🎯 Objectifs pédagogiques</h3>
-          <ul>${objs.map(o=>`<li>${o.trim()}</li>`).join('')}</ul>
+          <ul>${objs.map(o=>`<li>${esc(o.trim())}</li>`).join('')}</ul>
         </div>`:''}
         <div class="dblock">
           <h3>👤 Enseignant(s) référent(s)</h3>
-          <p>${p.Enseignant_Referent||'Non renseigné'}</p>
-          ${p.Created_By?`<div class="dlabel">Créé par</div><p>${p.Created_By}</p>`:''}
+          <p>${esc(p.Enseignant_Referent||'Non renseigné')}</p>
+          ${p.Created_By?`<div class="dlabel">Créé par</div><p>${esc(p.Created_By)}</p>`:''}
         </div>
         <div class="dblock">
           <h3>📚 Disciplines &amp; Niveaux</h3>
           <div class="dlabel">Disciplines mobilisées</div>
-          <p>${p.Disciplines_Mobilisees||'Non renseigné'}</p>
+          <p>${esc(p.Disciplines_Mobilisees||'Non renseigné')}</p>
           <div class="dlabel">Niveaux concernés</div>
-          <p>${p.Niveaux_Concernes||'Non renseigné'}</p>
+          <p>${esc(p.Niveaux_Concernes||'Non renseigné')}</p>
         </div>
         ${ax?`<div class="dblock full">
           <h3>🧭 Axe du Projet d'Établissement</h3>
           <div class="axe-glass">
             <div class="axe-num">AXE ${ax.n}</div>
             <div class="axe-ttl">${ax.t}</div>
-            ${p.Sous_Axe?`<p style="font-size:.8rem;color:var(--t2);margin-top:.4rem"><strong>Sous-axe :</strong> ${p.Sous_Axe}</p>`:''}
+            ${p.Sous_Axe?`<p style="font-size:.8rem;color:var(--t2);margin-top:.4rem"><strong>Sous-axe :</strong> ${esc(p.Sous_Axe)}</p>`:''}
             <div class="axe-chips">${ax.s.map(x=>`<span class="axe-chip">${x}</span>`).join('')}</div>
           </div>
         </div>`:''}
-        ${p.Partenariats?`<div class="dblock"><h3>🤝 Partenariats</h3><p>${p.Partenariats}</p></div>`:''}
-        ${p.Ressources_Necessaires?`<div class="dblock"><h3>🛠️ Ressources</h3><p>${p.Ressources_Necessaires}</p></div>`:''}
-        ${p.Modalite_Valorisation?`<div class="dblock full"><h3>🌟 Valorisation</h3><p>${p.Modalite_Valorisation}</p></div>`:''}
+        ${p.Partenariats?`<div class="dblock"><h3>🤝 Partenariats</h3><p>${esc(p.Partenariats)}</p></div>`:''}
+        ${p.Ressources_Necessaires?`<div class="dblock"><h3>🛠️ Ressources</h3><p>${esc(p.Ressources_Necessaires)}</p></div>`:''}
+        ${p.Modalite_Valorisation?`<div class="dblock full"><h3>🌟 Valorisation</h3><p>${esc(p.Modalite_Valorisation)}</p></div>`:''}
 
         <!-- Audit info -->
         ${p.Last_Modified_By?`<div class="dblock full audit-info">
-          <p>📝 Dernière modification par <strong>${p.Last_Modified_By}</strong> le ${fmt(p.Last_Modified_Date||'')}</p>
+          <p>📝 Dernière modification par <strong>${esc(p.Last_Modified_By)}</strong> le ${fmt(p.Last_Modified_Date||'')}</p>
         </div>`:''}
         ${isLocked?`<div class="dblock full audit-info">
-          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+p.Locked_By+'</strong>':''}${p.Locked_Date?' le '+fmt(p.Locked_Date):''}</p>
+          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+esc(p.Locked_By)+'</strong>':''}${p.Locked_Date?' le '+fmt(p.Locked_Date):''}</p>
         </div>`:''}
         ${isLocked&&!isAdDir?`<div class="dblock full"><div class="msg-info">🔒 Ce projet est verrouillé. Seuls les administrateurs et la direction peuvent le modifier.</div></div>`:''}
       </div>
 
       <div class="detail-actions">
-        ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${p.ID_Projet}')">✏️ Modifier</button>`:''}
-        ${isAdDir?`<button class="btn btn-back" onclick="toggleLock('${p.ID_Projet}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
-        ${cDel?`<button class="btn btn-danger" onclick="delProject('${p.ID_Projet}')">🗑️ Supprimer</button>`:''}
+        ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${esc(p.ID_Projet)}')">✏️ Modifier</button>`:''}
+        ${isAdDir?`<button class="btn btn-back" onclick="toggleLock('${esc(p.ID_Projet)}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
+        ${cDel?`<button class="btn btn-danger" onclick="delProject('${esc(p.ID_Projet)}')">🗑️ Supprimer</button>`:''}
         <button class="btn btn-back" onclick="history.back()">← Retour</button>
       </div>
 
@@ -2238,7 +2245,7 @@ function renderDetail(p){
         <div id="comments-list" class="comments-list"><div class="loader"><div class="spin"></div> Chargement…</div></div>
         <div class="comment-form">
           <textarea id="comment-text" class="comment-input" placeholder="Ajouter un commentaire…" rows="3"></textarea>
-          <button class="btn btn-add" onclick="submitComment('${p.ID_Projet}')">Envoyer</button>
+          <button class="btn btn-add" onclick="submitComment('${esc(p.ID_Projet)}')">Envoyer</button>
         </div>
       </div>`:''}
     </div>`;
@@ -2267,7 +2274,7 @@ async function submitComment(id){
   const txt=document.getElementById('comment-text');
   if(!txt||!txt.value.trim()){ toast('Veuillez saisir un commentaire.','⚠️'); return; }
   try {
-    const d=await apiPost({action:'add-comment',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id,comment:txt.value.trim()});
+    const d=await apiPost({action:'add-comment'},{id,comment:txt.value.trim()});
     if(d.success){ txt.value=''; toast('Commentaire ajouté.','💬'); loadComments(id); }
     else toast(d.error||'Erreur.','❌');
   } catch(e){ toast('Erreur réseau.','❌'); }
@@ -2277,7 +2284,7 @@ async function submitComment(id){
 async function toggleLock(id,lock){
   const action=lock?'lock-project':'unlock-project';
   try {
-    const d=await apiPost({action,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id});
+    const d=await apiPost({action},{id});
     if(d.success){ await loadProjects(); const p=S.projects.find(x=>x.ID_Projet===id); if(p){ S.sel=p; renderDetail(p); } toast(lock?'Projet verrouillé.':'Projet déverrouillé.',lock?'🔒':'🔓'); }
     else toast(d.error||'Erreur.','❌');
   } catch(e){ toast('Erreur réseau.','❌'); }
@@ -2287,7 +2294,7 @@ async function toggleLock(id,lock){
 async function loadTrashCount(){
   if(!S.user||(S.user.role!=='admin'&&S.user.role!=='direction')) return;
   try {
-    const d=await apiGet({action:'list-trash',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const d=await apiPost({action:'list-trash'},{});
     if(d.success){ S.trashProjects=d.data||[]; S.trashCount=S.trashProjects.length; }
   } catch(e){}
 }
@@ -2304,7 +2311,7 @@ function renderTrash(mc){
 
 async function loadTrashList(){
   try {
-    const d=await apiGet({action:'list-trash',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const d=await apiPost({action:'list-trash'},{});
     const el=document.getElementById('trash-list');
     if(!el) return;
     if(d.success && d.data && d.data.length){
@@ -2329,7 +2336,7 @@ async function loadTrashList(){
 async function restoreProject(id){
   confirm2('Restaurer ce projet','Voulez-vous restaurer ce projet ?', async()=>{
     try {
-      const d=await apiPost({action:'restore',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{id});
+      const d=await apiPost({action:'restore'},{id});
       if(d.success){ await loadProjects(); await loadTrashCount(); loadTrashList(); toast('Projet restauré.','♻️'); }
       else toast(d.error||'Erreur.','❌');
     } catch(e){ toast('Erreur réseau.','❌'); }
@@ -2339,7 +2346,7 @@ async function restoreProject(id){
 async function permanentDelete(id,name){
   confirm2('Suppression définitive',`Supprimer définitivement "${name}" ? Cette action est irréversible.`, async()=>{
     try {
-      const d=await apiGet({action:'permanent-delete',id,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+      const d=await apiPost({action:'permanent-delete'},{id});
       if(d.success){ await loadTrashCount(); loadTrashList(); toast('Projet supprimé définitivement.','💀'); }
       else toast(d.error||'Erreur.','❌');
     } catch(e){ toast('Erreur réseau.','❌'); }
@@ -2576,7 +2583,7 @@ async function doAdd(){
   const fd=getFormData();
   if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; return; }
   try {
-    const d=await apiPost({action:'add',table:'Projets',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},fd);
+    const d=await apiPost({action:'add',table:'Projets'},fd);
     if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet créé !','✅'); }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
@@ -2587,7 +2594,7 @@ async function doUpdate(id){
   const fd={...getFormData(),ID_Projet:id};
   if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; return; }
   try {
-    const d=await apiPost({action:'update',table:'Projets',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},fd);
+    const d=await apiPost({action:'update',table:'Projets'},fd);
     if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet mis à jour !','✅'); }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
@@ -2596,8 +2603,8 @@ async function doUpdate(id){
 async function delProject(id){
   const p=S.projects.find(x=>x.ID_Projet===id);
   if(!p) return;
-  confirm2('Mettre à la corbeille',`Déplacer "${p.Nom_Projet}" vers la corbeille ?`, async()=>{
-    const d=await apiGet({action:'delete',table:'Projets',id,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+  confirm2('Mettre à la corbeille',`Déplacer "${esc(p.Nom_Projet)}" vers la corbeille ?`, async()=>{
+    const d=await apiPost({action:'delete'},{table:'Projets',id});
     if(d.success){ await loadProjects(); await loadTrashCount(); showDashboard(); toast('Projet déplacé vers la corbeille.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
@@ -2645,9 +2652,9 @@ function renderChronologie(mc){
     items.forEach(p=>{
       const ph=getPhase(p,sm);
       const cls='phase-'+ph.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('é','e');
-      html+=`<div class="tl-item ${cls}" onclick="goDetail('${p.ID_Projet}')">
-        <div class="tl-top"><span class="tl-phase">${ph}</span><span class="tl-name">${p.Nom_Projet||''}</span></div>
-        <div class="tl-sub">👤 ${p.Enseignant_Referent||'N/A'} · ${p.Categorie||''}</div>
+      html+=`<div class="tl-item ${cls}" onclick="goDetail('${esc(p.ID_Projet)}')">
+        <div class="tl-top"><span class="tl-phase">${ph}</span><span class="tl-name">${esc(p.Nom_Projet||'')}</span></div>
+        <div class="tl-sub">👤 ${esc(p.Enseignant_Referent||'N/A')} · ${esc(p.Categorie||'')}</div>
       </div>`;
     });
     html+='</div>';
@@ -2885,9 +2892,9 @@ async function renderAdmin(mc){
   mc.innerHTML=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
   try {
     const [ud,ed,ld]=await Promise.all([
-      apiGet({action:'list',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')}),
-      apiGet({action:'list-emails',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')}),
-      apiGet({action:'get-logs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')})
+      apiPost({action:'list-users'},{}),
+      apiPost({action:'list-emails'},{}),
+      apiPost({action:'get-logs'},{})
     ]);
     const us=ud.success?ud.data||[]:[];
     const em=ed.success?ed.data||[]:[];
@@ -2904,16 +2911,16 @@ async function renderAdmin(mc){
             const fl=u.First_Login==='1';
             return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem">
               <div class="row-info" style="flex:1;min-width:0">
-                <div class="row-name">${u.Prenom||''} ${u.Nom||''} ${fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':''}</div>
-                <div class="row-sub">${u.Email||''} ${u.Mdp_Initial?'<span style="font-size:.65rem;color:var(--t3);margin-left:.3rem">mdp : <code style="background:rgba(0,83,163,.06);padding:.1rem .3rem;border-radius:4px;font-family:monospace;color:var(--aefe-blue)">'+u.Mdp_Initial+'</code></span>':''}</div>
+                <div class="row-name">${esc(u.Prenom||'')} ${esc(u.Nom||'')} ${fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':''}</div>
+                <div class="row-sub">${esc(u.Email||'')} ${u.Mdp_Initial?'<span style="font-size:.65rem;color:var(--t3);margin-left:.3rem">mdp : <code style="background:rgba(0,83,163,.06);padding:.1rem .3rem;border-radius:4px;font-family:monospace;color:var(--aefe-blue)">'+esc(u.Mdp_Initial)+'</code></span>':''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
                 ${isSelf
                   ? roleTag(u.Role)
-                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${u.Email}',this)">${roleOpts}</select>`
+                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${esc(u.Email)}',this)">${roleOpts}</select>`
                 }
-                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${u.Email}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
-                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${u.Email}')">✕</button>`:''}
+                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${esc(u.Email)}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
+                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${esc(u.Email)}')">✕</button>`:''}
               </div>
             </div>`;
           }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
@@ -2939,8 +2946,8 @@ async function renderAdmin(mc){
           <div class="admin-card-hd"><i class="ph ph-envelope-simple" style="margin-right:.2rem"></i> Emails autorisés <small>${em.length} adresses</small></div>
           <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'auto-inscrire.</p>
           ${em.map(e=>`<div class="row-item">
-            <span style="font-size:.82rem;color:var(--t1)">${e.Email||e}</span>
-            <button class="btn-xs bx-del" onclick="delEmail('${e.Email||e}')">✕</button>
+            <span style="font-size:.82rem;color:var(--t1)">${esc(e.Email||e)}</span>
+            <button class="btn-xs bx-del" onclick="delEmail('${esc(e.Email||e)}')">✕</button>
           </div>`).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun email autorisé.</p>'}
           <div class="admin-input-row">
             <input class="admin-input" type="email" id="new-em" placeholder="prenom.nom@egd.mg">
@@ -2968,12 +2975,12 @@ async function renderAdmin(mc){
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Système</th>
               </tr></thead>
               <tbody>${logs.slice(0,100).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${l.Date_Heure||''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2)">${l.Email||''} ${l.Role?roleTag(l.Role):''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${l.Action||''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.Detail||''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Ville,l.Pays].filter(Boolean).join(', ')||'—'}</td>
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Navigateur,l.OS,l.Appareil].filter(Boolean).join(' · ')||'—'}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${esc(l.Date_Heure||'')}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2)">${esc(l.Email||'')} ${l.Role?roleTag(l.Role):''}</td>
+                <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${esc(l.Action||'')}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.Detail||'')}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Ville,l.Pays].filter(Boolean).map(x=>esc(x)).join(', ')||'—'}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Navigateur,l.OS,l.Appareil].filter(Boolean).map(x=>esc(x)).join(' · ')||'—'}</td>
               </tr>`).join('')||'<tr><td colspan="6" style="color:var(--t3);padding:.5rem">Aucun journal.</td></tr>'}
               </tbody>
             </table>
@@ -2985,7 +2992,7 @@ async function renderAdmin(mc){
 
 async function delUser(email){
   confirm2('Supprimer cet utilisateur',`Supprimer le compte de ${email} ?`, async()=>{
-    const d=await apiGet({action:'delete',table:'Utilisateurs',email_target:email,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const d=await apiPost({action:'delete'},{table:'Utilisateurs',email_target:email});
     if(d.success){ renderAdmin(document.getElementById('mc')); toast('Utilisateur supprimé.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
@@ -3002,33 +3009,33 @@ async function addUser(){
   const ro=roEl.value||'enseignant';
   if(!pn||!nm||!em){ toast('Prénom, nom et email sont obligatoires.','⚠️'); return; }
   if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  const d=await apiPost({action:'add',table:'Utilisateurs',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{Email:em,Role:ro,Nom:nm,Prenom:pn});
-  if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+d.generated_password,'✅'); }
+  const d=await apiPost({action:'add',table:'Utilisateurs'},{Email:em,Role:ro,Nom:nm,Prenom:pn});
+  if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+esc(d.generated_password),'✅'); }
   else toast(d.error||'Erreur lors de la création.','❌');
 }
 async function adminResetPwd(email){
   confirm2('Réinitialiser le mot de passe','Un nouveau mot de passe sera généré et envoyé par email à '+email+'.', async()=>{
-    const d=await apiPost({action:'admin-reset-password',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{email});
+    const d=await apiPost({action:'admin-reset-password'},{email});
     if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Mot de passe réinitialisé.','🔑'); }
     else toast(d.error||'Erreur.','❌');
   });
 }
 async function changeRole(email, sel){
   const newRole=sel.value;
-  const d=await apiPost({action:'change-role',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{email,role:newRole});
+  const d=await apiPost({action:'change-role'},{email,role:newRole});
   if(d.success){ toast('Rôle modifié → '+newRole,'✅'); renderAdmin(document.getElementById('mc')); }
   else{ toast(d.error||'Erreur.','❌'); renderAdmin(document.getElementById('mc')); }
 }
 async function addEmail(){
   const inp=document.getElementById('new-em'), em=inp.value.trim().toLowerCase();
   if(!em||!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  const d=await apiPost({action:'add-email',email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')},{email:em});
+  const d=await apiPost({action:'add-email'},{email:em});
   if(d.success){ inp.value=''; renderAdmin(document.getElementById('mc')); toast('Email autorisé ajouté.','✅'); }
   else toast(d.error||'Erreur.','❌');
 }
 async function delEmail(email){
   confirm2('Retirer cet email',`Retirer ${email} des emails autorisés ?`, async()=>{
-    const d=await apiGet({action:'delete-email',target:email,email:localStorage.getItem('lft_e'),password:localStorage.getItem('lft_p')});
+    const d=await apiPost({action:'delete-email'},{target:email});
     if(d.success){ renderAdmin(document.getElementById('mc')); toast('Email retiré.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
@@ -3088,7 +3095,7 @@ function togglePw(btn){
   btn.innerHTML=show?_eyeOff:_eyeOn;
   btn.title=show?'Masquer':'Afficher';
 }
-function esc(s){ return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function renderCurrent(){
   if(S.page==='dashboard') renderDashboard();
   else if(S.page==='category') renderCatPage(S.filter);
