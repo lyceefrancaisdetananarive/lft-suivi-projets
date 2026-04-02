@@ -2641,7 +2641,7 @@ function renderChronologie(mc){
   SCHOOL_MONTHS.forEach(sm=>{
     const items=S.projects.filter(p=>inMonth(p,sm));
     if(!items.length) return;
-    html+=`<div class="tl-month"><div class="tl-month-hd">📆 ${sm.l} <small style="font-weight:400;color:var(--t3)">(${items.length})</small></div>`;
+    html+=`<div class="tl-month" id="tl-${sm.k}"><div class="tl-month-hd">📆 ${sm.l} <small style="font-weight:400;color:var(--t3)">(${items.length})</small></div>`;
     items.forEach(p=>{
       const ph=getPhase(p,sm);
       const cls='phase-'+ph.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('é','e');
@@ -2653,6 +2653,10 @@ function renderChronologie(mc){
     html+='</div>';
   });
   tl.innerHTML=html||'<p style="color:var(--t3);font-size:.85rem">Aucune donnée de date disponible.</p>';
+  // Auto-scroll vers le mois en cours
+  const now=new Date(), curKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const curEl=document.getElementById('tl-'+curKey);
+  if(curEl){ setTimeout(()=>curEl.scrollIntoView({behavior:'smooth',block:'start'}),200); }
 }
 function inMonth(p,sm){
   if(!p.Date_Debut&&!p.Date_Fin) return false;
