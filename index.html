@@ -2216,10 +2216,10 @@ function renderDetail(p){
 
         <!-- Audit info -->
         ${p.Last_Modified_By?`<div class="dblock full audit-info">
-          <p>📝 Dernière modification par <strong>${p.Last_Modified_By}</strong> le ${fmt(p.Last_Modified_At||'')}</p>
+          <p>📝 Dernière modification par <strong>${p.Last_Modified_By}</strong> le ${fmt(p.Last_Modified_Date||'')}</p>
         </div>`:''}
         ${isLocked?`<div class="dblock full audit-info">
-          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+p.Locked_By+'</strong>':''}${p.Locked_At?' le '+fmt(p.Locked_At):''}</p>
+          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+p.Locked_By+'</strong>':''}${p.Locked_Date?' le '+fmt(p.Locked_Date):''}</p>
         </div>`:''}
         ${isLocked&&!isAdDir?`<div class="dblock full"><div class="msg-info">🔒 Ce projet est verrouillé. Seuls les administrateurs et la direction peuvent le modifier.</div></div>`:''}
       </div>
@@ -3102,9 +3102,24 @@ async function init(){
     window.history.replaceState({},document.title,window.location.pathname);
     openResetForm(resetToken);
   }
-  // État initial dans l'historique
-  history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname);
-  renderDashboard();
+  // Routage initial : respecter le hash dans l'URL (liens partagés)
+  const hash=window.location.hash;
+  if(hash.startsWith('#/detail/')){
+    const id=decodeURIComponent(hash.replace('#/detail/',''));
+    const p=S.projects.find(x=>x.ID_Projet===id);
+    if(p){ S.page='detail'; S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]); history.replaceState({page:'detail',filter:null,selId:id},'',hash); renderDetail(p); }
+    else { history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname); renderDashboard(); }
+  } else if(hash.startsWith('#/cat/')){
+    const cat=decodeURIComponent(hash.replace('#/cat/',''));
+    S.page='category'; S.filter=cat; setBc([{l:cat}]); history.replaceState({page:'category',filter:cat,selId:null},'',hash); renderCatPage(cat);
+  } else if(hash.startsWith('#/filter/')){
+    const f=decodeURIComponent(hash.replace('#/filter/',''));
+    const fv=f==='all'?null:f; S.page='filtered'; S.filter=fv;
+    const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
+    setBc([{l:labels[fv]||'Projets'}]); history.replaceState({page:'filtered',filter:fv,selId:null},'',hash); renderFilteredPage(fv);
+  } else {
+    history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname); renderDashboard();
+  }
 }
 init();
 </script>
