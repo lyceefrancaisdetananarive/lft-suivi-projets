@@ -2852,7 +2852,8 @@ function renderClubs(mc){
 
 /* INTERNAT */
 function renderInternat(mc){
-  const ip=S.projects.filter(p=>(p.Nom_Projet||'').toLowerCase().includes('internat')||(p.Description||'').toLowerCase().includes('internat'));
+  const re=/\binternat\b/i;
+  const ip=S.projects.filter(p=>re.test(p.Nom_Projet||'')||re.test(p.Description||'')||re.test(p.Niveaux_Concernes||''));
   mc.innerHTML=`
     <div class="sec-hd">
       <div class="sec-title">🏠 Projets de l'Internat</div>
