@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+._*
+
+# Dossiers ressources (ne font pas partie du site)
+Charte Graphique de l'AEFE/
+Police MARIANNE/
+Corrections/
+
+# Documents générés (mots de passe provisoires, publipostage)
+documents/
+
+# Fichiers sensibles
+*.json
+.env
+
+# Claude
+.claude/
