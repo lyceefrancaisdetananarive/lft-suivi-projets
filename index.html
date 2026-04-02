@@ -2348,8 +2348,14 @@ async function permanentDelete(id,name){
 
 function fmt(d){
   if(!d) return '?';
-  try { const [y,m,day]=d.split('-'); const mo=['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.']; return `${+day} ${mo[+m-1]} ${y}`; }
-  catch(e){ return d; }
+  try {
+    const clean=String(d).trim().split(' ')[0]; // "2026-04-02 15:05:33" → "2026-04-02"
+    const [y,m,day]=clean.split('-');
+    const mo=['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+    const di=parseInt(day,10), mi=parseInt(m,10);
+    if(isNaN(di)||isNaN(mi)) return d;
+    return `${di} ${mo[mi-1]} ${y}`;
+  } catch(e){ return d; }
 }
 
 /* ═══════════════════════════════════════════════════════════
