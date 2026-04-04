@@ -1519,8 +1519,20 @@ function checkSessionExpiry(){
 const VS_CATS=['Clubs et activités','Projets de l\'Internat'];
 function isVS(){ return S.user && S.user.role==='vie_scolaire'; }
 function canAdd(){ return !!S.user; }
-function canEdit(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||S.user.email===p.Created_By); }
-function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||(S.user.role==='enseignant'&&S.user.email===p.Created_By)); }
+/* Vérifie si l'utilisateur connecté est listé dans Enseignant_Referent */
+function isReferent(p){
+  if(!S.user||!p.Enseignant_Referent) return false;
+  const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  const ref=norm(p.Enseignant_Referent);
+  const nom=norm(S.user.nom);
+  if(!nom||nom.length<2) return false;
+  const nomMatch=ref.includes(nom)||nom.split(/[-\s]/).filter(x=>x.length>=3).some(x=>ref.includes(x));
+  if(!nomMatch) return false;
+  const prenom=norm(S.user.prenom);
+  return !prenom||prenom.length<2||ref.includes(prenom);
+}
+function canEdit(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||S.user.email===p.Created_By||isReferent(p)); }
+function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||(S.user.email===p.Created_By||isReferent(p))); }
 function canRequestDeletion(){ return S.user && (S.user.role==='enseignant'||S.user.role==='vie_scolaire'); }
 
 /* ═══════════════════════════════════════════════════════════
