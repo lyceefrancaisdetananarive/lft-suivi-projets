@@ -69,6 +69,16 @@ function nowStr() {
   return Utilities.formatDate(new Date(), 'Indian/Antananarivo', 'yyyy-MM-dd HH:mm:ss');
 }
 
+/**
+ * Protege contre l'injection de formules dans Google Sheets.
+ * Prefixe les valeurs commencant par = + - @ avec une apostrophe.
+ */
+function sanitizeCell(val) {
+  if (typeof val !== 'string') return val;
+  if (val.length > 0 && '=+-@'.indexOf(val.charAt(0)) >= 0) return "'" + val;
+  return val;
+}
+
 // ============================================================
 // AUTHENTIFICATION PAR MOT DE PASSE (login uniquement)
 // ============================================================
@@ -202,6 +212,32 @@ function isVsCat(cat) {
     if (VS_CATS[i] === cat) return true;
   }
   return false;
+}
+
+/**
+ * Verifie si l'utilisateur est liste dans Enseignant_Referent du projet
+ * Compare Nom + Prenom (insensible accents/casse)
+ */
+function isReferentOf(user, referentStr) {
+  if (!user || !referentStr) return false;
+  var norm = function(s) {
+    return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+  };
+  var ref = norm(referentStr);
+  var nom = norm(user.nom);
+  if (!nom || nom.length < 2) return false;
+  // Check nom (handle hyphenated names like MARIN-CUDRAZ)
+  var nomMatch = ref.indexOf(nom) >= 0;
+  if (!nomMatch) {
+    var parts = nom.split(/[-\s]/);
+    for (var p = 0; p < parts.length; p++) {
+      if (parts[p].length >= 3 && ref.indexOf(parts[p]) >= 0) { nomMatch = true; break; }
+    }
+  }
+  if (!nomMatch) return false;
+  var prenom = norm(user.prenom);
+  if (prenom && prenom.length >= 2) return ref.indexOf(prenom) >= 0;
+  return true;
 }
 
 function isEmailAuthorized(email) {
@@ -351,11 +387,23 @@ function handleLogin(e) {
   var pwd   = body.password || '';
   var di    = extractDeviceInfo(e);
 
+  // Rate limiting : max 5 echecs par email en 15 minutes
+  var cache  = CacheService.getScriptCache();
+  var cKey   = 'login_fail_' + email.replace(/[^a-z0-9]/g, '_');
+  var fails  = parseInt(cache.get(cKey) || '0');
+  if (fails >= 5) {
+    addLog(email, '', 'login_blocked', 'Trop de tentatives (' + fails + ')', di);
+    return jsonResponse({ success: false, error: 'Trop de tentatives. Reessayez dans quelques minutes.' });
+  }
+
   var user = authenticate(email, pwd);
   if (!user) {
-    addLog(email, '', 'login_fail', 'Identifiants incorrects', di);
+    cache.put(cKey, (fails + 1).toString(), 900); // 15 min TTL
+    addLog(email, '', 'login_fail', 'Identifiants incorrects (' + (fails + 1) + '/5)', di);
     return jsonResponse({ success: false, error: 'Identifiants incorrects' });
   }
+  // Succes : reset le compteur
+  cache.remove(cKey);
 
   // Creer un token de session
   var token = createSession(email);
@@ -728,12 +776,14 @@ function handleDelete(e) {
         var owner      = data[i][createdByIdx] ? data[i][createdByIdx].toString() : '';
         var projectCat = data[i][catIdx] ? data[i][catIdx].toString() : '';
         var nomProjet  = data[i][nomIdx] ? data[i][nomIdx].toString() : targetId;
+        var refIdx     = headers.indexOf('Enseignant_Referent');
+        var referent   = refIdx >= 0 ? (data[i][refIdx] || '').toString() : '';
 
         if (isVieScolaire(user)) {
           if (!isVsCat(projectCat))
             return jsonResponse({ success: false, error: 'Vie scolaire : suppression limitee a vos categories' });
         } else if (!isAdminOrDirection(user)) {
-          if (owner !== user.email)
+          if (owner !== user.email && !isReferentOf(user, referent))
             return jsonResponse({ success: false, error: 'Vous ne pouvez supprimer que vos propres projets' });
         }
 
@@ -1135,7 +1185,7 @@ function handleAdd(e) {
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   var body  = JSON.parse(e.postData.contents);
-  var table = body._table || PROJETS_SHEET;
+  var table = e.parameter.table || body.table || body._table || PROJETS_SHEET;
 
   if (table === USERS_SHEET && !isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
 
@@ -1173,7 +1223,7 @@ function handleAdd(e) {
     addLog(user.email, user.role, 'add_user', 'Creation utilisateur: ' + body['Email'] + ' (' + (body['Role'] || 'enseignant') + ')');
   }
 
-  var newRow = headers.map(function(h) { return body[h] !== undefined ? body[h] : ''; });
+  var newRow = headers.map(function(h) { return body[h] !== undefined ? sanitizeCell(body[h]) : ''; });
   sheet.appendRow(newRow);
   var response = { success: true, message: 'Ajout reussi', id: body['ID_Projet'] || body['Email'] };
   if (table === USERS_SHEET) response.generated_password = body['Mdp_Initial'];
@@ -1210,17 +1260,19 @@ function handleUpdate(e) {
 
       var owner      = data[i][createdByIdx] ? data[i][createdByIdx].toString() : '';
       var projectCat = data[i][catIdx] ? data[i][catIdx].toString() : '';
+      var refIdx     = headers.indexOf('Enseignant_Referent');
+      var referent   = refIdx >= 0 ? (data[i][refIdx] || '').toString() : '';
 
       if (isVieScolaire(user) && !isVsCat(projectCat))
         return jsonResponse({ success: false, error: 'Vie scolaire : modification limitee a vos categories' });
-      if (!isAdminOrDirection(user) && !isVieScolaire(user) && owner !== user.email)
+      if (!isAdminOrDirection(user) && !isVieScolaire(user) && owner !== user.email && !isReferentOf(user, referent))
         return jsonResponse({ success: false, error: 'Vous ne pouvez modifier que vos propres projets' });
 
       for (var j = 0; j < headers.length; j++) {
         if (headers[j] === 'ID_Projet' || headers[j] === 'Created_By') continue;
         if (headers[j] === 'Deleted' || headers[j] === 'Deleted_By' || headers[j] === 'Deleted_Date') continue;
         if (headers[j] === 'Last_Modified_By' || headers[j] === 'Last_Modified_Date') continue;
-        if (body[headers[j]] !== undefined) sheet.getRange(i + 1, j + 1).setValue(body[headers[j]]);
+        if (body[headers[j]] !== undefined) sheet.getRange(i + 1, j + 1).setValue(sanitizeCell(body[headers[j]]));
       }
       if (lmByIdx >= 0)   sheet.getRange(i + 1, lmByIdx + 1).setValue(user.email);
       if (lmDateIdx >= 0) sheet.getRange(i + 1, lmDateIdx + 1).setValue(nowStr());
