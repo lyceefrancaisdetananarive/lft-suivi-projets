@@ -1536,6 +1536,21 @@ function canDelete(p){ return S.user && (S.user.role==='admin'||S.user.role==='d
 function canRequestDeletion(){ return S.user && (S.user.role==='enseignant'||S.user.role==='vie_scolaire'); }
 
 /* ═══════════════════════════════════════════════════════════
+   ANTI DOUBLE-SUBMIT GUARD
+═══════════════════════════════════════════════════════════ */
+let _busy=false;
+function setBusy(btn){
+  if(_busy) return false;
+  _busy=true;
+  if(btn&&btn instanceof HTMLElement){ btn.disabled=true; btn._wasBusy=true; }
+  return true;
+}
+function clearBusy(){
+  _busy=false;
+  document.querySelectorAll('[disabled]').forEach(el=>{ if(el._wasBusy){ el.disabled=false; delete el._wasBusy; }});
+}
+
+/* ═══════════════════════════════════════════════════════════
    API
 ═══════════════════════════════════════════════════════════ */
 /* Device info — RGPD : timezone uniquement, pas de geolocalisation IP */
@@ -1778,14 +1793,15 @@ function openResetForm(token){
 function closeAuth(){ document.getElementById('auth-ov').classList.remove('open'); }
 
 async function doLogin(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const em=v('a-em').toLowerCase(), pw=v('a-pw'), err=document.getElementById('ae');
   err.style.display='none';
-  if(!em||!pw){ err.textContent='Champs obligatoires.'; err.style.display='block'; return; }
+  if(!em||!pw){ err.textContent='Champs obligatoires.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'login'},{email:em,password:pw});
     if(d.success){
       if(d.user.first_login){
-        // Première connexion → forcer le changement de mot de passe
         S._fcToken=d.token; S._fcEmail=em; S._fcUser=d.user;
         openForceChangePassword(em,d.token,d.user);
       } else {
@@ -1795,6 +1811,7 @@ async function doLogin(){
       }
     } else { err.textContent=d.error||'Identifiants incorrects.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau. Vérifiez l\'URL de l\'API.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 
 /* Première connexion : changement de mot de passe obligatoire (style Pronote) */
@@ -1814,15 +1831,16 @@ function openForceChangePassword(email,token,userInfo){
 }
 
 async function doForceChange(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const pw=v('cp-pw'), p2=v('cp-p2');
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
-  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; return; }
-  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir au moins 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; return; }
-  if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
+  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
+  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; clearBusy(); return; }
+  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir au moins 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; clearBusy(); return; }
+  if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; clearBusy(); return; }
   try {
-    // Utiliser le token reçu au login pour s'authentifier
     const oldToken=S._fcToken||'';
     const r=await fetch(API_URL+'?'+new URLSearchParams({action:'change-password',token:oldToken,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({new_password:pw}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
     const d=await r.json();
@@ -1833,13 +1851,16 @@ async function doForceChange(){
       closeAuth(); updateHeader(); toast('Mot de passe modifié — bienvenue '+(S.user.prenom||'')+'!','🔐'); renderCurrent();
     } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 async function doRegister(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const pn=v('r-pn'), nm=v('r-nm').toUpperCase(), em=v('r-em').toLowerCase();
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!pn||!nm||!em){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
-  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
+  if(!pn||!nm||!em){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
+  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'register'},{Email:em,Nom:nm,Prenom:pn});
     if(d.success){
@@ -1851,32 +1872,39 @@ async function doRegister(){
       ok.style.display='block';
     } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 async function doForgotPassword(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const em=v('f-em').toLowerCase();
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!em){ err.textContent='Veuillez saisir votre adresse email.'; err.style.display='block'; return; }
-  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; return; }
+  if(!em){ err.textContent='Veuillez saisir votre adresse email.'; err.style.display='block'; clearBusy(); return; }
+  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'forgot-password'},{email:em});
     if(d.success){ ok.textContent=d.message||'Email envoyé. Vérifiez votre boîte mail.'; ok.style.display='block'; }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 async function doConfirmReset(token){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const pw=v('f-pw'), p2=v('f-p2');
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
-  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; return; }
-  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; return; }
-  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; return; }
-  if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; return; }
+  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
+  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; clearBusy(); return; }
+  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; clearBusy(); return; }
+  if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'confirm-reset'},{token,password:pw});
     if(d.success){ ok.textContent=d.message||'Mot de passe modifié !'; ok.style.display='block'; setTimeout(openLogin,2200); }
     else { err.textContent=d.error||'Token invalide ou expiré.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2283,13 +2311,16 @@ async function loadComments(id){
 }
 
 async function submitComment(id){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const txt=document.getElementById('comment-text');
-  if(!txt||!txt.value.trim()){ toast('Veuillez saisir un commentaire.','⚠️'); return; }
+  if(!txt||!txt.value.trim()){ toast('Veuillez saisir un commentaire.','⚠️'); clearBusy(); return; }
   try {
     const d=await apiPost({action:'add-comment'},{id,comment:txt.value.trim()});
     if(d.success){ txt.value=''; toast('Commentaire ajouté.','💬'); loadComments(id); }
     else toast(d.error||'Erreur.','❌');
   } catch(e){ toast('Erreur réseau.','❌'); }
+  finally { clearBusy(); }
 }
 
 /* ── Lock / Unlock ── */
@@ -2591,25 +2622,31 @@ function getFormData(){
 }
 
 async function doAdd(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const err=document.getElementById('fe'); err.style.display='none';
   const fd=getFormData();
-  if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; return; }
+  if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'add',table:'Projets'},fd);
     if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet créé !','✅'); }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 
 async function doUpdate(id){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const err=document.getElementById('fe'); err.style.display='none';
   const fd={...getFormData(),ID_Projet:id};
-  if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; return; }
+  if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; clearBusy(); return; }
   try {
     const d=await apiPost({action:'update',table:'Projets'},fd);
     if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet mis à jour !','✅'); }
     else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
   } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+  finally { clearBusy(); }
 }
 
 async function delProject(id){
@@ -3010,20 +3047,24 @@ async function delUser(email){
   });
 }
 async function addUser(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const pnEl=document.getElementById('nu-pn');
   const nmEl=document.getElementById('nu-nm');
   const emEl=document.getElementById('nu-em');
   const roEl=document.getElementById('nu-ro');
-  if(!pnEl||!nmEl||!emEl||!roEl){ toast('Formulaire introuvable.','❌'); return; }
+  if(!pnEl||!nmEl||!emEl||!roEl){ toast('Formulaire introuvable.','❌'); clearBusy(); return; }
   const pn=pnEl.value.trim();
   const nm=nmEl.value.trim().toUpperCase();
   const em=emEl.value.trim().toLowerCase();
   const ro=roEl.value||'enseignant';
-  if(!pn||!nm||!em){ toast('Prénom, nom et email sont obligatoires.','⚠️'); return; }
-  if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  const d=await apiPost({action:'add',table:'Utilisateurs'},{Email:em,Role:ro,Nom:nm,Prenom:pn});
-  if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+esc(d.generated_password),'✅'); }
-  else toast(d.error||'Erreur lors de la création.','❌');
+  if(!pn||!nm||!em){ toast('Prénom, nom et email sont obligatoires.','⚠️'); clearBusy(); return; }
+  if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); clearBusy(); return; }
+  try {
+    const d=await apiPost({action:'add',table:'Utilisateurs'},{Email:em,Role:ro,Nom:nm,Prenom:pn});
+    if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+esc(d.generated_password),'✅'); }
+    else toast(d.error||'Erreur lors de la création.','❌');
+  } finally { clearBusy(); }
 }
 async function adminResetPwd(email){
   confirm2('Réinitialiser le mot de passe','Un nouveau mot de passe sera généré et envoyé par email à '+email+'.', async()=>{
@@ -3039,11 +3080,15 @@ async function changeRole(email, sel){
   else{ toast(d.error||'Erreur.','❌'); renderAdmin(document.getElementById('mc')); }
 }
 async function addEmail(){
+  const btn=event&&event.target;
+  if(!setBusy(btn)) return;
   const inp=document.getElementById('new-em'), em=inp.value.trim().toLowerCase();
-  if(!em||!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); return; }
-  const d=await apiPost({action:'add-email'},{email:em});
-  if(d.success){ inp.value=''; renderAdmin(document.getElementById('mc')); toast('Email autorisé ajouté.','✅'); }
-  else toast(d.error||'Erreur.','❌');
+  if(!em||!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); clearBusy(); return; }
+  try {
+    const d=await apiPost({action:'add-email'},{email:em});
+    if(d.success){ inp.value=''; renderAdmin(document.getElementById('mc')); toast('Email autorisé ajouté.','✅'); }
+    else toast(d.error||'Erreur.','❌');
+  } finally { clearBusy(); }
 }
 async function delEmail(email){
   confirm2('Retirer cet email',`Retirer ${email} des emails autorisés ?`, async()=>{
