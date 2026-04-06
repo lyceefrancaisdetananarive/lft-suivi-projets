@@ -1574,7 +1574,7 @@ function _devInfo(){
 }
 function _auth(){ return {token: localStorage.getItem('lft_t')||''}; }
 async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._auth(),..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify(b||{}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
+async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({...(b||{}),..._auth()}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
 
 async function loadProjects(){
   try {
@@ -1842,7 +1842,7 @@ async function doForceChange(){
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; clearBusy(); return; }
   try {
     const oldToken=S._fcToken||'';
-    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'change-password',token:oldToken,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({new_password:pw}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
+    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'change-password',..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({new_password:pw,token:oldToken}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
     const d=await r.json();
     if(d.success){
       S.user=d.user||S._fcUser; S.user.first_login=false;
@@ -1973,7 +1973,7 @@ function renderDashboard(){
     <div class="sec-hd">
       <div class="sec-title">Catégories de projets</div>
       <div class="sec-actions">
-        ${isAdDir?`<a class="btn btn-back" href="${API_URL}?action=export" target="_blank" style="text-decoration:none"><i class="ph ph-download-simple"></i> Exporter CSV</a>`:''}
+        ${isAdDir?`<button class="btn btn-back" onclick="doExport()" style="text-decoration:none"><i class="ph ph-download-simple"></i> Exporter CSV</button>`:''}
         ${S.user?`<button class="btn btn-add" onclick="openAddForm()">+ Nouveau projet</button>`:''}
       </div>
     </div>
@@ -2657,6 +2657,22 @@ async function delProject(id){
     if(d.success){ await loadProjects(); await loadTrashCount(); showDashboard(); toast('Projet déplacé vers la corbeille.','🗑️'); }
     else toast(d.error||'Erreur.','❌');
   });
+}
+
+async function doExport(){
+  try {
+    toast('Export en cours…','📥');
+    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'export',..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth()}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
+    if(!r.ok){ toast('Erreur export.','❌'); return; }
+    const csv=await r.text();
+    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='projets-lft-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Export téléchargé !','✅');
+  } catch(e){ toast('Erreur réseau.','❌'); }
 }
 
 function closeForm(){ document.getElementById('form-ov').classList.remove('open'); }

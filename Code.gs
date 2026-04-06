@@ -186,8 +186,10 @@ function createSession(email) {
  * Helper : authentifie par token OU par email+password (fallback pour premiere connexion)
  */
 function getAuthUser(e) {
-  // Essayer le token d'abord
-  var token = e.parameter.token || '';
+  // Lire le token depuis le body POST (securise) OU fallback URL param
+  var body = {};
+  try { body = JSON.parse(e.postData.contents || '{}'); } catch(x) {}
+  var token = body.token || e.parameter.token || '';
   if (token) {
     var user = authenticateByToken(token);
     if (user) return user;
@@ -336,7 +338,6 @@ function doGet(e) {
     switch (e.parameter.action) {
       case 'list':           return handleList(e);
       case 'list-comments':  return handleListComments(e);
-      case 'export':         return handleExport(e);
       default: return jsonResponse({ success: false, error: 'Action non reconnue (GET)' });
     }
   } catch (err) { return jsonResponse({ success: false, error: err.toString() }); }
@@ -370,7 +371,8 @@ function doPost(e) {
       case 'delete-email':         return handleDeleteEmail(e);
       case 'change-role':          return handleChangeRole(e);
       case 'request-deletion':     return handleRequestDeletion(e);
-      // Liste utilisateurs (admin)
+      // Export + Liste utilisateurs (admin)
+      case 'export':               return handleExport(e);
       case 'list-users':           return handleListUsers(e);
       default: return jsonResponse({ success: false, error: 'Action non reconnue (POST)' });
     }
@@ -1027,6 +1029,9 @@ function handleListComments(e) {
 // ============================================================
 
 function handleExport(e) {
+  var user = getAuthUser(e);
+  if (!isAdminOrDirection(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin/Direction uniquement' });
+
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
