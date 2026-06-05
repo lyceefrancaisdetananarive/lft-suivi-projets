@@ -25,16 +25,93 @@
  * - enseignant   : cree, modifie et supprime SES projets uniquement
  */
 
-var PROJETS_SHEET  = 'Projets';
+// Onglets non dates (inchanges par l'archivage annuel)
 var USERS_SHEET    = 'Utilisateurs';
 var EMAILS_SHEET   = 'Emails_Autorises';
 var LOGS_SHEET     = 'Logs';
-var COMMENTS_SHEET = 'Commentaires';
+
+// Onglets dates par annee scolaire : Projets_2025-2026, Commentaires_2025-2026...
+var PROJETS_PREFIX  = 'Projets';
+var COMMENTS_PREFIX = 'Commentaires';
+
 var ADMIN_EMAIL    = 'max.rafaliarison@aefe.fr';
 var APP_URL        = 'https://lyceefrancaisdetananarive.github.io/lft-suivi-projets/';
 var SESSION_HOURS  = 8;
 
 var VS_CATS = ['Clubs et activités', "Projets de l'Internat"];
+
+// En-tetes de l'onglet Projets (27 colonnes) — reference unique
+var PROJETS_HEADERS = ['ID_Projet','Nom_Projet','Categorie','Echelle','Axe_Projet_Etablissement','Sous_Axe','Disciplines_Mobilisees','Niveaux_Concernes','Description','Objectifs_Pedagogiques','Statut','Priorite','Date_Debut','Date_Fin','Partenariats','Ressources_Necessaires','Modalite_Valorisation','Enseignant_Referent','Created_By','Deleted','Deleted_By','Deleted_Date','Locked','Locked_By','Locked_Date','Last_Modified_By','Last_Modified_Date'];
+
+// ============================================================
+// ANNEE SCOLAIRE — bascule automatique le 4 juillet
+// ============================================================
+
+/**
+ * Annee scolaire active a la date donnee (defaut : maintenant, fuseau Antananarivo).
+ * Convention : bascule le 4 juillet 00h00. Avant -> (y-1)-y, a partir du 4/7 -> y-(y+1).
+ * Retourne une chaine "2025-2026".
+ */
+function currentSchoolYear(now) {
+  if (!now) {
+    // Date locale Antananarivo (UTC+3, sans DST)
+    var parts = Utilities.formatDate(new Date(), 'Indian/Antananarivo', 'yyyy-MM-dd').split('-');
+    now = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  }
+  var y = now.getFullYear();
+  var cutoff = new Date(y, 6, 4); // 4 juillet (mois 6 = juillet)
+  return (now < cutoff) ? (y - 1) + '-' + y : y + '-' + (y + 1);
+}
+
+function projetsSheetName(year)  { return PROJETS_PREFIX  + '_' + (year || currentSchoolYear()); }
+function commentsSheetName(year) { return COMMENTS_PREFIX + '_' + (year || currentSchoolYear()); }
+
+/** Une annee est archivee si elle est anterieure a l'annee courante (comparaison de chaine, ordre OK). */
+function isArchivedYear(year) {
+  return year && year < currentSchoolYear();
+}
+
+/** Lit le parametre year (body POST ou URL), fallback = annee courante. */
+function getYearParam(e) {
+  var year = '';
+  try {
+    var body = JSON.parse(e.postData.contents || '{}');
+    year = body.year || '';
+  } catch (x) {}
+  if (!year) year = e.parameter.year || '';
+  return year || currentSchoolYear();
+}
+
+/**
+ * Retourne l'onglet Projets de l'annee demandee, en le creant avec ses en-tetes s'il n'existe pas.
+ * Creation paresseuse : ouvrir une nouvelle annee ne demande aucune action admin.
+ */
+function ensureYearSheet(year) {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var name = projetsSheetName(year);
+  var sh   = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, PROJETS_HEADERS.length).setValues([PROJETS_HEADERS]);
+    sh.getRange(1, 1, 1, PROJETS_HEADERS.length).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** Onglet Commentaires de l'annee, cree si absent. */
+function ensureCommentsSheet(year) {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var name = commentsSheetName(year);
+  var cs   = ss.getSheetByName(name);
+  if (!cs) {
+    cs = ss.insertSheet(name);
+    cs.getRange(1, 1, 1, 5).setValues([['ID_Projet', 'Date_Heure', 'Email', 'Nom_Prenom', 'Commentaire']]);
+    cs.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
+    cs.setFrozenRows(1);
+  }
+  return cs;
+}
 
 // ============================================================
 // UTILITAIRES
@@ -263,8 +340,9 @@ function emailAlreadyRegistered(email) {
   return false;
 }
 
-function generateProjectId(categorie) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+function generateProjectId(categorie, sheet) {
+  // sheet = onglet de l'annee cible (numerotation repart a 001 par annee)
+  if (!sheet) sheet = ensureYearSheet(currentSchoolYear());
   var data  = sheet.getDataRange().getValues();
   var prefix  = 'LFT';
   if (categorie && categorie.indexOf('AEFE') >= 0)          prefix = 'AEFE';
@@ -338,6 +416,7 @@ function doGet(e) {
     switch (e.parameter.action) {
       case 'list':           return handleList(e);
       case 'list-comments':  return handleListComments(e);
+      case 'list-years':     return handleListYears(e);
       default: return jsonResponse({ success: false, error: 'Action non reconnue (GET)' });
     }
   } catch (err) { return jsonResponse({ success: false, error: err.toString() }); }
@@ -361,6 +440,7 @@ function doPost(e) {
       case 'restore':              return handleRestore(e);
       case 'lock-project':         return handleLockProject(e);
       case 'unlock-project':       return handleUnlockProject(e);
+      case 'reconduct':            return handleReconduct(e);
       // Commentaires
       case 'add-comment':          return handleAddComment(e);
       // Admin
@@ -658,11 +738,13 @@ function handleRequestDeletion(e) {
 // ============================================================
 
 function handleList(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
-  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
+  var year  = getYearParam(e);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
+  // Onglet d'annee absent (annee non encore ouverte) : liste vide, pas une erreur
+  if (!sheet) return jsonResponse({ success: true, data: [], year: year });
 
   var data = sheet.getDataRange().getValues();
-  if (data.length < 2) return jsonResponse({ success: true, data: [] });
+  if (data.length < 2) return jsonResponse({ success: true, data: [], year: year });
 
   var headers = data[0];
   var deletedIdx = headers.indexOf('Deleted');
@@ -677,7 +759,7 @@ function handleList(e) {
     }
     results.push(row);
   }
-  return jsonResponse({ success: true, data: results });
+  return jsonResponse({ success: true, data: results, year: year });
 }
 
 // ============================================================
@@ -722,7 +804,8 @@ function handleListTrash(e) {
   var user = getAuthUser(e);
   if (!canManageTrash(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin/Direction uniquement' });
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  var year  = getYearParam(e);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
   if (!sheet) return jsonResponse({ success: true, data: [] });
 
   var data = sheet.getDataRange().getValues();
@@ -755,15 +838,21 @@ function handleDelete(e) {
   var di = extractDeviceInfo(e);
 
   var body  = JSON.parse(e.postData.contents);
-  var table = body.table || PROJETS_SHEET;
+  // table logique : 'Projets' (defaut) ou 'Utilisateurs'
+  var table = body.table || 'Projets';
+  var year  = getYearParam(e);
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
+  // Resolution de l'onglet : Projets -> onglet date de l'annee
+  var sheetName = (table === USERS_SHEET) ? USERS_SHEET : projetsSheetName(year);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
 
-  if (table === PROJETS_SHEET) {
+  if (table !== USERS_SHEET) {
+    if (isArchivedYear(year) && !isAdmin(user))
+      return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
     var targetId     = body.id || '';
     var idIdx        = headers.indexOf('ID_Projet');
     var nomIdx       = headers.indexOf('Nom_Projet');
@@ -831,8 +920,12 @@ function handleRestore(e) {
 
   var body     = JSON.parse(e.postData.contents);
   var targetId = (body.id || '').trim();
+  var year     = getYearParam(e);
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data    = sheet.getDataRange().getValues();
@@ -872,8 +965,12 @@ function handlePermanentDelete(e) {
 
   var body     = JSON.parse(e.postData.contents);
   var targetId = (body.id || '').trim();
+  var year     = getYearParam(e);
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data    = sheet.getDataRange().getValues();
@@ -907,8 +1004,13 @@ function handleLockProject(e) {
 
   var body     = JSON.parse(e.postData.contents);
   var targetId = (body.id || '').trim();
+  var year     = getYearParam(e);
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
+  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
   var idIdx        = headers.indexOf('ID_Projet');
@@ -940,8 +1042,13 @@ function handleUnlockProject(e) {
 
   var body     = JSON.parse(e.postData.contents);
   var targetId = (body.id || '').trim();
+  var year     = getYearParam(e);
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
+  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
   var idIdx        = headers.indexOf('ID_Projet');
@@ -978,18 +1085,15 @@ function handleAddComment(e) {
   var body = JSON.parse(e.postData.contents);
   var projectId = (body.id || '').trim();
   var comment   = (body.comment || '').trim();
+  var year      = getYearParam(e);
+
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut commenter." });
 
   if (!projectId || !comment) return jsonResponse({ success: false, error: 'Projet et commentaire requis' });
   if (comment.length > 1000) return jsonResponse({ success: false, error: 'Commentaire trop long (max 1000 car.)' });
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var cs = ss.getSheetByName(COMMENTS_SHEET);
-  if (!cs) {
-    cs = ss.insertSheet(COMMENTS_SHEET);
-    cs.getRange(1, 1, 1, 5).setValues([['ID_Projet', 'Date_Heure', 'Email', 'Nom_Prenom', 'Commentaire']]);
-    cs.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
-    cs.setFrozenRows(1);
-  }
+  var cs = ensureCommentsSheet(year);
 
   var nomPrenom = (user.prenom || '') + ' ' + (user.nom || '');
   cs.appendRow([projectId, nowStr(), user.email, nomPrenom.trim(), comment]);
@@ -1001,8 +1105,9 @@ function handleListComments(e) {
   var projectId = (e.parameter.id || '').trim();
   if (!projectId) return jsonResponse({ success: false, error: 'ID projet requis' });
 
+  var year = getYearParam(e);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var cs = ss.getSheetByName(COMMENTS_SHEET);
+  var cs = ss.getSheetByName(commentsSheetName(year));
   if (!cs) return jsonResponse({ success: true, data: [] });
 
   var data = cs.getDataRange().getValues();
@@ -1032,7 +1137,8 @@ function handleExport(e) {
   var user = getAuthUser(e);
   if (!isAdminOrDirection(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin/Direction uniquement' });
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  var year  = getYearParam(e);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data = sheet.getDataRange().getValues();
@@ -1190,19 +1296,29 @@ function handleAdd(e) {
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   var body  = JSON.parse(e.postData.contents);
-  var table = e.parameter.table || body.table || body._table || PROJETS_SHEET;
+  // table logique : 'Projets' (defaut) ou 'Utilisateurs'
+  var table = e.parameter.table || body.table || body._table || 'Projets';
+  var year  = getYearParam(e);
+  var isProject = (table !== USERS_SHEET);
 
-  if (table === USERS_SHEET && !isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
+  if (!isProject && !isAdmin(user)) return jsonResponse({ success: false, error: 'Admin requis' });
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
+  var sheet;
+  if (isProject) {
+    if (isArchivedYear(year) && !isAdmin(user))
+      return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+    sheet = ensureYearSheet(year); // creation paresseuse de l'onglet de l'annee
+  } else {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  }
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  if (table === PROJETS_SHEET) {
+  if (isProject) {
     if (isVieScolaire(user) && !isVsCat(body['Categorie']))
       return jsonResponse({ success: false, error: 'Vie scolaire : creation limitee a vos categories' });
-    body['ID_Projet']          = generateProjectId(body['Categorie']);
+    body['ID_Projet']          = generateProjectId(body['Categorie'], sheet);
     body['Created_By']         = user.email;
     body['Deleted']            = '';
     body['Deleted_By']         = '';
@@ -1244,7 +1360,12 @@ function handleUpdate(e) {
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
 
   var body  = JSON.parse(e.postData.contents);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PROJETS_SHEET);
+  var year  = getYearParam(e);
+
+  if (isArchivedYear(year) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "Cette annee est archivee (lecture seule). Seul l'administrateur peut la modifier." });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(projetsSheetName(year));
   if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
 
   var data         = sheet.getDataRange().getValues();
@@ -1295,25 +1416,10 @@ function handleUpdate(e) {
 
 function initializeSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var yr = currentSchoolYear();
 
-  // Projets (27 colonnes)
-  var p = ss.getSheetByName(PROJETS_SHEET);
-  if (!p) {
-    p = ss.insertSheet(PROJETS_SHEET);
-    var ph = ['ID_Projet','Nom_Projet','Categorie','Echelle','Axe_Projet_Etablissement','Sous_Axe','Disciplines_Mobilisees','Niveaux_Concernes','Description','Objectifs_Pedagogiques','Statut','Priorite','Date_Debut','Date_Fin','Partenariats','Ressources_Necessaires','Modalite_Valorisation','Enseignant_Referent','Created_By','Deleted','Deleted_By','Deleted_Date','Locked','Locked_By','Locked_Date','Last_Modified_By','Last_Modified_Date'];
-    p.getRange(1, 1, 1, ph.length).setValues([ph]);
-    p.getRange(1, 1, 1, ph.length).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
-    p.setFrozenRows(1);
-  } else {
-    var existingH = p.getRange(1, 1, 1, p.getLastColumn()).getValues()[0];
-    var newCols = ['Deleted','Deleted_By','Deleted_Date','Locked','Locked_By','Locked_Date','Last_Modified_By','Last_Modified_Date'];
-    for (var c = 0; c < newCols.length; c++) {
-      if (existingH.indexOf(newCols[c]) < 0) {
-        var col = p.getLastColumn() + 1;
-        p.getRange(1, col).setValue(newCols[c]).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
-      }
-    }
-  }
+  // Projets de l'annee courante (27 colonnes) — onglet date
+  ensureYearSheet(yr);
 
   // Utilisateurs (11 colonnes v6 : +Session_Token, Session_Expiry)
   var u = ss.getSheetByName(USERS_SHEET);
@@ -1363,17 +1469,146 @@ function initializeSheets() {
     }
   }
 
-  // Commentaires
-  var cs = ss.getSheetByName(COMMENTS_SHEET);
-  if (!cs) {
-    cs = ss.insertSheet(COMMENTS_SHEET);
-    cs.getRange(1, 1, 1, 5).setValues([['ID_Projet','Date_Heure','Email','Nom_Prenom','Commentaire']]);
-    cs.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
-    cs.setFrozenRows(1);
+  // Commentaires de l'annee courante — onglet date
+  ensureCommentsSheet(yr);
+
+  Logger.log('=== Initialisation v7 terminee ! ===');
+  Logger.log('Annee scolaire courante : ' + yr);
+  Logger.log('Onglets dates : ' + projetsSheetName(yr) + ', ' + commentsSheetName(yr));
+  Logger.log('Bascule automatique le 4 juillet');
+}
+
+// ============================================================
+// MIGRATION ONE-SHOT : Projets -> Projets_2025-2026
+// A executer UNE SEULE FOIS dans l'editeur Apps Script.
+// Idempotente : ne fait rien si la migration est deja faite.
+// ============================================================
+
+function migrateToYearlySheets() {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var year = '2025-2026'; // l'annee historique des donnees existantes
+  var done = [];
+
+  // 1) Projets -> Projets_2025-2026
+  var oldP = ss.getSheetByName('Projets');
+  var newPName = projetsSheetName(year);
+  if (oldP && !ss.getSheetByName(newPName)) {
+    oldP.setName(newPName);
+    done.push('Projets -> ' + newPName);
   }
 
-  Logger.log('=== Initialisation v6 terminee ! ===');
-  Logger.log('Nouvelles colonnes Utilisateurs : Session_Token, Session_Expiry');
-  Logger.log('Toutes les actions sensibles passent par POST');
-  Logger.log('Authentification par token de session (8h)');
+  // 2) Commentaires -> Commentaires_2025-2026
+  var oldC = ss.getSheetByName('Commentaires');
+  var newCName = commentsSheetName(year);
+  if (oldC && !ss.getSheetByName(newCName)) {
+    oldC.setName(newCName);
+    done.push('Commentaires -> ' + newCName);
+  }
+
+  // 3) Preparer l'annee suivante (vide, avec en-tetes) pour la saisie anticipee
+  var nextYear = '2026-2027';
+  if (!ss.getSheetByName(projetsSheetName(nextYear))) {
+    ensureYearSheet(nextYear);
+    done.push('Cree ' + projetsSheetName(nextYear) + ' (vide)');
+  }
+
+  Logger.log(done.length ? ('Migration : ' + done.join(' | ')) : 'Rien a migrer (deja fait).');
+  return done;
+}
+
+// ============================================================
+// LIST YEARS (GET, public) — onglets Projets_* disponibles
+// ============================================================
+
+function handleListYears(e) {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var years  = [];
+  var pfx    = PROJETS_PREFIX + '_';
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    if (name.indexOf(pfx) === 0) {
+      years.push(name.substring(pfx.length));
+    }
+  }
+  var current = currentSchoolYear();
+  // S'assurer que l'annee courante figure toujours dans la liste
+  if (years.indexOf(current) < 0) years.push(current);
+  years.sort(); // ordre lexicographique = ordre chronologique pour "YYYY-YYYY"
+  return jsonResponse({ success: true, years: years, current: current });
+}
+
+// ============================================================
+// RECONDUCT (POST) — duplique un projet vers une autre annee
+// ============================================================
+
+function handleReconduct(e) {
+  var user = getAuthUser(e);
+  if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
+  var di = extractDeviceInfo(e);
+
+  var body       = JSON.parse(e.postData.contents);
+  var sourceId   = (body.id || '').trim();
+  var sourceYear = (body.sourceYear || '').trim() || currentSchoolYear();
+  var targetYear = (body.targetYear || '').trim() || currentSchoolYear();
+
+  if (!sourceId) return jsonResponse({ success: false, error: 'Projet source requis' });
+
+  // L'annee cible ne doit pas etre archivee (sauf admin)
+  if (isArchivedYear(targetYear) && !isAdmin(user))
+    return jsonResponse({ success: false, error: "L'annee cible est archivee. Seul l'administrateur peut y ajouter un projet." });
+
+  var ss     = SpreadsheetApp.getActiveSpreadsheet();
+  var srcSh  = ss.getSheetByName(projetsSheetName(sourceYear));
+  if (!srcSh) return jsonResponse({ success: false, error: 'Annee source introuvable' });
+
+  var data    = srcSh.getDataRange().getValues();
+  var headers = data[0];
+  var idIdx   = headers.indexOf('ID_Projet');
+
+  // Localiser le projet source
+  var src = null;
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][idIdx] === sourceId) { src = data[i]; break; }
+  }
+  if (!src) return jsonResponse({ success: false, error: 'Projet source introuvable' });
+
+  // Vie scolaire : limitee a ses categories
+  var catIdx = headers.indexOf('Categorie');
+  var srcCat = catIdx >= 0 ? (src[catIdx] || '').toString() : '';
+  if (isVieScolaire(user) && !isVsCat(srcCat))
+    return jsonResponse({ success: false, error: 'Vie scolaire : reconduction limitee a vos categories' });
+
+  // Construire le nouveau projet : copie du contenu, dates videes, statut Planifie
+  var tgtSh = ensureYearSheet(targetYear);
+  var tgtHeaders = tgtSh.getRange(1, 1, 1, tgtSh.getLastColumn()).getValues()[0];
+
+  var copyFromSource = {}; // valeurs de contenu copiees
+  for (var h = 0; h < headers.length; h++) copyFromSource[headers[h]] = src[h];
+
+  var newId = generateProjectId(srcCat, tgtSh);
+  var resetFields = {
+    'ID_Projet': newId,
+    'Statut': 'Planifié',
+    'Date_Debut': '',
+    'Date_Fin': '',
+    'Created_By': user.email,
+    'Deleted': '', 'Deleted_By': '', 'Deleted_Date': '',
+    'Locked': '', 'Locked_By': '', 'Locked_Date': '',
+    'Last_Modified_By': user.email,
+    'Last_Modified_Date': nowStr()
+  };
+
+  var newRow = tgtHeaders.map(function(col) {
+    if (resetFields.hasOwnProperty(col)) return sanitizeCell(resetFields[col]);
+    var v = copyFromSource.hasOwnProperty(col) ? copyFromSource[col] : '';
+    if (v instanceof Date) v = Utilities.formatDate(v, 'Indian/Antananarivo', 'yyyy-MM-dd');
+    return sanitizeCell(v !== undefined && v !== null ? v.toString() : '');
+  });
+  tgtSh.appendRow(newRow);
+
+  var nomIdx = headers.indexOf('Nom_Projet');
+  var nomProjet = nomIdx >= 0 ? (src[nomIdx] || '').toString() : sourceId;
+  addLog(user.email, user.role, 'reconduct_project', 'Reconduit ' + sourceId + ' (' + sourceYear + ') -> ' + newId + ' (' + targetYear + ') : ' + nomProjet, di);
+  return jsonResponse({ success: true, message: 'Projet reconduit pour ' + targetYear, id: newId, year: targetYear });
 }
