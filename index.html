@@ -1141,6 +1141,8 @@ nav {
 .confirm-btns button { flex:1; padding:.55rem; border-radius:var(--r-md); border:none; cursor:pointer; font-weight:700; font-size:.85rem; transition:all var(--dur) var(--ease); }
 #cyes { background:#ef4444; color:#fff; }
 #cyes:hover { background:#dc2626; }
+#cyes.cyes-primary { background:linear-gradient(135deg,var(--aefe-blue),var(--aefe-magenta)); }
+#cyes.cyes-primary:hover { filter:brightness(1.08); }
 #cno  { background:var(--g1); color:var(--t1); }
 #cno:hover  { background:var(--g2); }
 
@@ -1906,12 +1908,18 @@ function toast(msg,icon='ℹ️'){
    CONFIRM
 ═══════════════════════════════════════════════════════════ */
 let _cb=null;
-function confirm2(title,msg,cb){
+/* opts.okLabel : libellé du bouton de validation (défaut "Supprimer")
+   opts.okStyle : 'primary' (bleu/magenta) ou 'danger' (rouge, défaut) */
+function confirm2(title,msg,cb,opts){
+  opts=opts||{};
   document.getElementById('ctitle').textContent=title;
   document.getElementById('cmsg').textContent=msg;
+  const yes=document.getElementById('cyes');
+  yes.textContent=opts.okLabel||'Supprimer';
+  yes.className=(opts.okStyle==='primary')?'cyes-primary':'';
   document.getElementById('confirm-ov').style.display='flex';
   _cb=cb;
-  document.getElementById('cyes').onclick=()=>{ closeConfirm(); _cb&&_cb(); };
+  yes.onclick=()=>{ closeConfirm(); _cb&&_cb(); };
 }
 function closeConfirm(){ document.getElementById('confirm-ov').style.display='none'; _cb=null; }
 
@@ -2511,19 +2519,26 @@ async function doReconduct(id){
   const sourceYear=S.year;
   const p=S.projects.find(x=>x.ID_Projet===id);
   const nom=p?p.Nom_Projet:'ce projet';
-  confirm2('Reconduire pour '+target,
-    `Créer une copie de « ${esc(nom)} » pour l'année scolaire ${target} ?\nLe contenu est repris ; les dates seront à redéfinir et le statut repassera à « Planifié ».`,
+  confirm2(
+    'Reconduire pour '+target,
+    `Créer une copie de « ${nom} » pour l'année scolaire ${target} ? Le contenu est repris ; les dates seront à redéfinir et le statut repassera à « Planifié ». Vous serez ensuite redirigé(e) vers la nouvelle fiche.`,
     async()=>{
+      toast('Reconduction en cours…','⏳');
       try {
         const d=await apiPost({action:'reconduct'},{id, sourceYear, targetYear:target});
-        if(d.success){
-          toast('Projet reconduit pour '+target+' !','♻️');
+        if(d && d.success){
+          // Basculer vers l'année cible puis ouvrir directement la fiche reconduite
           await switchYear(target);
           const np=S.projects.find(x=>x.ID_Projet===d.id);
-          if(np) goDetail(d.id);
-        } else toast(d.error||'Erreur.','❌');
-      } catch(e){ toast('Erreur réseau.','❌'); }
-    });
+          if(np) goDetail(d.id); else showDashboard();
+          toast('Projet reconduit en '+target+' (réf. '+(d.id||'')+'). Pensez à renseigner les dates.','✅');
+        } else {
+          toast((d&&d.error)?('Échec : '+d.error):'La reconduction a échoué.','❌');
+        }
+      } catch(e){ toast('Erreur réseau : la reconduction n\'a pas été effectuée.','❌'); }
+    },
+    {okLabel:'♻️ Reconduire le projet', okStyle:'primary'}
+  );
 }
 
 /* ── Lock / Unlock ── */
@@ -2586,7 +2601,7 @@ async function restoreProject(id){
       if(d.success){ await loadProjects(); await loadTrashCount(); loadTrashList(); toast('Projet restauré.','♻️'); }
       else toast(d.error||'Erreur.','❌');
     } catch(e){ toast('Erreur réseau.','❌'); }
-  });
+  }, {okLabel:'Restaurer', okStyle:'primary'});
 }
 
 async function permanentDelete(id,name){
@@ -3294,7 +3309,7 @@ async function adminResetPwd(email){
     const d=await apiPost({action:'admin-reset-password'},{email});
     if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Mot de passe réinitialisé.','🔑'); }
     else toast(d.error||'Erreur.','❌');
-  });
+  }, {okLabel:'Réinitialiser', okStyle:'primary'});
 }
 async function changeRole(email, sel){
   const newRole=sel.value;
