@@ -1919,7 +1919,8 @@ function confirm2(title,msg,cb,opts){
   yes.className=(opts.okStyle==='primary')?'cyes-primary':'';
   document.getElementById('confirm-ov').style.display='flex';
   _cb=cb;
-  yes.onclick=()=>{ closeConfirm(); _cb&&_cb(); };
+  // Capturer le callback AVANT closeConfirm (qui remet _cb à null)
+  yes.onclick=()=>{ var c=_cb; closeConfirm(); if(c) c(); };
 }
 function closeConfirm(){ document.getElementById('confirm-ov').style.display='none'; _cb=null; }
 
