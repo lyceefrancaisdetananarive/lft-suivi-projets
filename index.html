@@ -1831,24 +1831,38 @@ async function requestAccountDeletion(){
    SPA HISTORY (pushState / popstate)
 ═══════════════════════════════════════════════════════════ */
 let _skipPush=false; // flag pour éviter pushState lors du popstate
+/* Les identifiants de projet repartent à 001 à chaque année scolaire : un lien ne peut
+   désigner un projet sans son année. On la porte donc dans l'état d'historique, et dans
+   l'URL dès qu'on ne consulte pas l'année courante. */
+function yearQuery(){
+  return (S.year && S.year!==S.currentYear) ? '?annee='+encodeURIComponent(S.year) : '';
+}
 function navPush(){
   if(_skipPush) return;
-  const state={page:S.page, filter:S.filter, selId:S.sel?S.sel.ID_Projet:null};
+  const state={page:S.page, filter:S.filter, selId:S.sel?S.sel.ID_Projet:null, year:S.year};
   const hash=S.page==='dashboard'?'':
     S.page==='detail'&&S.sel?'#/detail/'+encodeURIComponent(S.sel.ID_Projet):
     S.page==='category'?'#/cat/'+encodeURIComponent(S.filter):
     S.page==='filtered'?'#/filter/'+(S.filter||'all'):
     '#/'+S.page;
-  history.pushState(state,'',(hash||window.location.pathname));
+  history.pushState(state,'',window.location.pathname+yearQuery()+hash);
 }
-window.addEventListener('popstate',function(e){
+window.addEventListener('popstate',async function(e){
   _skipPush=true;
+  try {
   if(e.state){
     const st=e.state;
     S.page=st.page||'dashboard'; S.filter=st.filter||null; S.search=''; S.statusFilter='all';
+    // Restaurer l'année consultée AVANT tout rendu, sinon on afficherait les projets
+    // d'une année sous le millésime d'une autre.
+    if(st.year && st.year!==S.year){
+      S.year=st.year; S.months=schoolMonthsFor(S.year);
+      renderYearSelector();
+      await loadProjects(); await loadTrashCount();
+    }
     if(st.page==='detail'&&st.selId){
       const p=S.projects.find(x=>x.ID_Projet===st.selId);
-      if(p){ S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]); renderDetail(p); }
+      if(p){ S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${jsq(p.Categorie)}')`},{l:p.Nom_Projet}]); renderDetail(p); }
       else showDashboard();
     } else if(st.page==='category'&&st.filter){
       setBc([{l:st.filter}]); renderCatPage(st.filter);
@@ -1859,7 +1873,7 @@ window.addEventListener('popstate',function(e){
       setBc([]); renderDashboard();
     } else {
       const lbls={chronologie:'Chronologie',etab:"Projet d'Établissement",clubs:'Clubs & Activités',
-        internat:"Projets de l'Internat",admin:'Administration',tutoriel:'Tutoriels',mentions:'Mentions légales'};
+        internat:"Projets de l'Internat",admin:'Administration',trash:'Corbeille',tutoriel:'Tutoriels',mentions:'Mentions légales'};
       setBc([{l:lbls[st.page]||st.page}]);
       const mc=document.getElementById('mc');
       switch(st.page){
@@ -1868,6 +1882,7 @@ window.addEventListener('popstate',function(e){
         case 'clubs': renderClubs(mc); break;
         case 'internat': renderInternat(mc); break;
         case 'admin': renderAdmin(mc); break;
+        case 'trash': renderTrash(mc); break;
         case 'tutoriel': renderTutoriel(mc); break;
         case 'mentions': renderMentions(mc); break;
         default: showDashboard();
@@ -1876,7 +1891,7 @@ window.addEventListener('popstate',function(e){
   } else {
     showDashboard();
   }
-  _skipPush=false;
+  } finally { _skipPush=false; } // toujours relâché, même si un rendu échoue
 });
 
 /* ═══════════════════════════════════════════════════════════
@@ -1888,8 +1903,10 @@ function setBc(items){
   items.forEach((it,i)=>{
     const isLast=i===items.length-1;
     bc.innerHTML+='<span class="sep"> › </span>';
-    if(isLast && !it.fn) bc.innerHTML+=`<span class="bc-current">${it.l}</span>`;
-    else bc.innerHTML+=it.fn?`<span onclick="${it.fn}">${it.l}</span>`:`<span class="bc-current">${it.l}</span>`;
+    // it.l est une donnée (nom de projet, catégorie) : toujours l'échapper.
+    // it.fn est du code JS construit par l'appelant, dont les arguments sont passés par jsq().
+    if(isLast && !it.fn) bc.innerHTML+=`<span class="bc-current">${esc(it.l)}</span>`;
+    else bc.innerHTML+=it.fn?`<span onclick="${it.fn}">${esc(it.l)}</span>`:`<span class="bc-current">${esc(it.l)}</span>`;
   });
   updateArchiveBar(); // bandeau archive coherent sur chaque page
 }
@@ -2363,7 +2380,7 @@ function renderGridFilt(c){
 function cardHTML(p){
   const ci=CATS[p.Categorie]||{cb:'cb-def'};
   const s=computeStatus(p);
-  return `<div class="pcard" onclick="goDetail('${esc(p.ID_Projet)}')">
+  return `<div class="pcard" onclick="goDetail('${jsq(p.ID_Projet)}')">
     <div class="pcard-top">
       <span class="cat-badge ${ci.cb}">${esc(p.Categorie||'')}</span>
       <span class="status-pill ${SC[s]}">${SL[s]||s}</span>
@@ -2387,7 +2404,7 @@ function goDetail(id){
   const p=S.projects.find(x=>x.ID_Projet===id);
   if(!p) return;
   S.sel=p; S.page='detail';
-  setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]);
+  setBc([{l:p.Categorie,fn:`goCategory('${jsq(p.Categorie)}')`},{l:p.Nom_Projet}]);
   renderDetail(p); navPush();
 }
 
@@ -2461,10 +2478,10 @@ function renderDetail(p){
       </div>
 
       <div class="detail-actions">
-        ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${esc(p.ID_Projet)}')">✏️ Modifier</button>`:''}
-        ${S.user?`<button class="btn btn-primary" onclick="doReconduct('${esc(p.ID_Projet)}')">♻️ Reconduire pour ${esc(reconductTarget())}</button>`:''}
-        ${isAdDir&&canWriteYear()?`<button class="btn btn-back" onclick="toggleLock('${esc(p.ID_Projet)}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
-        ${cDel?`<button class="btn btn-danger" onclick="delProject('${esc(p.ID_Projet)}')">🗑️ Supprimer</button>`:''}
+        ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${jsq(p.ID_Projet)}')">✏️ Modifier</button>`:''}
+        ${S.user?`<button class="btn btn-primary" onclick="doReconduct('${jsq(p.ID_Projet)}')">♻️ Reconduire pour ${esc(reconductTarget())}</button>`:''}
+        ${isAdDir&&canWriteYear()?`<button class="btn btn-back" onclick="toggleLock('${jsq(p.ID_Projet)}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
+        ${cDel?`<button class="btn btn-danger" onclick="delProject('${jsq(p.ID_Projet)}')">🗑️ Supprimer</button>`:''}
         <button class="btn btn-back" onclick="history.back()">← Retour</button>
       </div>
 
@@ -2475,7 +2492,7 @@ function renderDetail(p){
         <div id="comments-list" class="comments-list"><div class="loader"><div class="spin"></div> Chargement…</div></div>
         ${canWriteYear()?`<div class="comment-form">
           <textarea id="comment-text" class="comment-input" placeholder="Ajouter un commentaire…" rows="3"></textarea>
-          <button class="btn btn-add" onclick="submitComment('${esc(p.ID_Projet)}')">Envoyer</button>
+          <button class="btn btn-add" onclick="submitComment('${jsq(p.ID_Projet)}')">Envoyer</button>
         </div>`:`<p class="comment-empty">🗄️ Année archivée : les commentaires sont en lecture seule.</p>`}
       </div>`:''}
     </div>`;
@@ -2489,10 +2506,12 @@ async function loadComments(id){
     const el=document.getElementById('comments-list');
     if(!el) return;
     if(d.success && d.data && d.data.length){
+      // Les clés proviennent des en-têtes de l'onglet Commentaires_<année> (Code.gs,
+      // ensureCommentsSheet) : ID_Projet, Date_Heure, Email, Nom_Prenom, Commentaire.
       el.innerHTML=d.data.map(c=>`
         <div class="comment-item">
-          <div class="comment-header"><strong>${esc(c.Author||c.Email||'')}</strong><span class="comment-date">${c.Date||''}</span></div>
-          <div class="comment-body">${esc(c.Comment||c.Text||'')}</div>
+          <div class="comment-header"><strong>${esc(c.Nom_Prenom||c.Email||'')}</strong><span class="comment-date">${c.Date_Heure?esc(fmt(c.Date_Heure)):''}</span></div>
+          <div class="comment-body">${esc(c.Commentaire||'')}</div>
         </div>`).join('');
     } else {
       el.innerHTML='<p class="comment-empty">Aucun commentaire pour le moment.</p>';
@@ -2585,8 +2604,8 @@ async function loadTrashList(){
             <span class="trash-meta">${esc(p.Categorie||'')} · Supprimé par ${esc(p.Deleted_By||'?')} le ${p.Deleted_At||'?'}</span>
           </div>
           <div class="trash-actions">
-            <button class="btn btn-add btn-xs" onclick="restoreProject('${p.ID_Projet}')">Restaurer</button>
-            <button class="btn btn-danger btn-xs" onclick="permanentDelete('${p.ID_Projet}','${esc(p.Nom_Projet||'')}')">Supprimer définitivement</button>
+            <button class="btn btn-add btn-xs" onclick="restoreProject('${jsq(p.ID_Projet)}')">Restaurer</button>
+            <button class="btn btn-danger btn-xs" onclick="permanentDelete('${jsq(p.ID_Projet)}','${jsq(p.Nom_Projet||'')}')">Supprimer définitivement</button>
           </div>
         </div>`).join('');
     } else {
@@ -2730,7 +2749,7 @@ function renderForm(p){
     <div class="fg"><label>Modalité de valorisation</label>
       <input type="text" id="f-val" value="${p?esc(p.Modalite_Valorisation||''):''}"></div>
     <button class="btn btn-primary" style="width:100%;margin-top:.2rem"
-      onclick="${ed?`doUpdate('${p.ID_Projet}')`:'doAdd()'}">${ed?'💾 Enregistrer':'✅ Créer le projet'}</button>
+      onclick="${ed?`doUpdate('${jsq(p.ID_Projet)}')`:'doAdd()'}">${ed?'💾 Enregistrer':'✅ Créer le projet'}</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="closeForm()">Annuler</button>`;
   if(p&&p.Axe_Projet_Etablissement) updAxeHint();
   nivSetFromString(p?p.Niveaux_Concernes||'':'');
@@ -2940,7 +2959,7 @@ function renderChronologie(mc){
     items.forEach(p=>{
       const ph=getPhase(p,sm);
       const cls='phase-'+ph.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('é','e');
-      html+=`<div class="tl-item ${cls}" onclick="goDetail('${esc(p.ID_Projet)}')">
+      html+=`<div class="tl-item ${cls}" onclick="goDetail('${jsq(p.ID_Projet)}')">
         <div class="tl-top"><span class="tl-phase">${ph}</span><span class="tl-name">${esc(p.Nom_Projet||'')}</span></div>
         <div class="tl-sub">👤 ${esc(p.Enseignant_Referent||'N/A')} · ${esc(p.Categorie||'')}</div>
       </div>`;
@@ -3205,10 +3224,10 @@ async function renderAdmin(mc){
               <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
                 ${isSelf
                   ? roleTag(u.Role)
-                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${esc(u.Email)}',this)">${roleOpts}</select>`
+                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${jsq(u.Email)}',this)">${roleOpts}</select>`
                 }
-                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${esc(u.Email)}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
-                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${esc(u.Email)}')">✕</button>`:''}
+                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${jsq(u.Email)}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
+                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${jsq(u.Email)}')">✕</button>`:''}
               </div>
             </div>`;
           }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
@@ -3234,8 +3253,8 @@ async function renderAdmin(mc){
           <div class="admin-card-hd"><i class="ph ph-envelope-simple" style="margin-right:.2rem"></i> Emails autorisés <small>${em.length} adresses</small></div>
           <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'auto-inscrire.</p>
           ${em.map(e=>`<div class="row-item">
-            <span style="font-size:.82rem;color:var(--t1)">${esc(e.Email||e)}</span>
-            <button class="btn-xs bx-del" onclick="delEmail('${esc(e.Email||e)}')">✕</button>
+            <span style="font-size:.82rem;color:var(--t1)">${jsq(e.Email||e)}</span>
+            <button class="btn-xs bx-del" onclick="delEmail('${jsq(e.Email||e)}')">✕</button>
           </div>`).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun email autorisé.</p>'}
           <div class="admin-input-row">
             <input class="admin-input" type="email" id="new-em" placeholder="prenom.nom@egd.mg">
@@ -3392,6 +3411,21 @@ function togglePw(btn){
   btn.title=show?'Masquer':'Afficher';
 }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* Échappe une donnée destinée à un littéral JS entre apostrophes, lui-même placé dans
+   un attribut HTML : onclick="maFonction('…')".
+   esc() ne convient PAS ici : il produit &#39; que le parseur HTML redonne sous forme
+   d'apostrophe au moteur JS, ce qui referme le littéral (cas « Projets de l'Internat »).
+   L'ordre des remplacements compte : antislash, puis apostrophe, puis entités HTML. */
+function jsq(s){
+  return String(s==null?'':s)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
 function renderCurrent(){
   if(S.page==='dashboard') renderDashboard();
   else if(S.page==='category') renderCatPage(S.filter);
@@ -3422,26 +3456,33 @@ async function init(){
   // Détecter un token de réinitialisation dans l'URL (?reset=TOKEN)
   const resetToken=params.get('reset');
   if(resetToken){
-    window.history.replaceState({},document.title,window.location.pathname);
+    // On retire le jeton de l'URL mais on conserve l'année consultée
+    window.history.replaceState({},document.title,window.location.pathname+yearQuery());
     openResetForm(resetToken);
   }
-  // Routage initial : respecter le hash dans l'URL (liens partagés)
+  // Routage initial : respecter le hash dans l'URL (liens partagés).
+  // L'année est réinjectée dans l'URL et dans l'état, sinon un rafraîchissement ou un
+  // retour navigateur ramènerait l'utilisateur sur l'année courante.
+  const base=window.location.pathname+yearQuery();
   const hash=window.location.hash;
   if(hash.startsWith('#/detail/')){
     const id=decodeURIComponent(hash.replace('#/detail/',''));
     const p=S.projects.find(x=>x.ID_Projet===id);
-    if(p){ S.page='detail'; S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${p.Categorie}')`},{l:p.Nom_Projet}]); history.replaceState({page:'detail',filter:null,selId:id},'',hash); renderDetail(p); }
-    else { history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname); renderDashboard(); }
+    if(p){ S.page='detail'; S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${jsq(p.Categorie)}')`},{l:p.Nom_Projet}]); history.replaceState({page:'detail',filter:null,selId:id,year:S.year},'',base+hash); renderDetail(p); }
+    else {
+      history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
+      toast('Projet introuvable dans l\'année '+S.year+'. Essayez une autre année scolaire.','🔎');
+    }
   } else if(hash.startsWith('#/cat/')){
     const cat=decodeURIComponent(hash.replace('#/cat/',''));
-    S.page='category'; S.filter=cat; setBc([{l:cat}]); history.replaceState({page:'category',filter:cat,selId:null},'',hash); renderCatPage(cat);
+    S.page='category'; S.filter=cat; setBc([{l:cat}]); history.replaceState({page:'category',filter:cat,selId:null,year:S.year},'',base+hash); renderCatPage(cat);
   } else if(hash.startsWith('#/filter/')){
     const f=decodeURIComponent(hash.replace('#/filter/',''));
     const fv=f==='all'?null:f; S.page='filtered'; S.filter=fv;
     const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
-    setBc([{l:labels[fv]||'Projets'}]); history.replaceState({page:'filtered',filter:fv,selId:null},'',hash); renderFilteredPage(fv);
+    setBc([{l:labels[fv]||'Projets'}]); history.replaceState({page:'filtered',filter:fv,selId:null,year:S.year},'',base+hash); renderFilteredPage(fv);
   } else {
-    history.replaceState({page:'dashboard',filter:null,selId:null},'',window.location.pathname); renderDashboard();
+    history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
   }
 }
 init();
