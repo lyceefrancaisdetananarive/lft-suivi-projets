@@ -1,28 +1,46 @@
 /**
  * ============================================================
- * LFT - Suivi des Projets d'Etablissement - v6 (SECURISE)
+ * LFT - Suivi des Projets d'Etablissement - v7.1
  * Google Apps Script - API Backend
  * Lycee Francais de Tananarive - AEFE
  * ============================================================
  *
- * SECURITE v6 :
+ * SECURITE :
  * - Authentification par token de session (UUID, expire 8h)
- * - Plus de mot de passe dans les URL (GET)
- * - Toutes les actions sensibles passent par POST
+ * - Toutes les actions sensibles passent par POST, jamais dans l'URL
  * - Verification des roles cote serveur sur chaque action
+ * - sanitizeCell() contre l'injection de formules dans la feuille
  *
- * ONGLETS REQUIS :
- * - "Projets"          (27 colonnes)
- * - "Utilisateurs"     (11 colonnes : +Session_Token, Session_Expiry)
- * - "Emails_Autorises" (1 colonne)
- * - "Logs"             (10 colonnes)
- * - "Commentaires"     (5 colonnes)
+ * ARCHIVAGE PAR ANNEE SCOLAIRE (v7) :
+ * - Un onglet par annee : Projets_<annee>, Commentaires_<annee>
+ * - currentSchoolYear() bascule automatiquement le 4 juillet
+ * - Une annee anterieure passe en lecture seule, sauf pour l'admin
+ * - Les identifiants repartent a 001 chaque annee : un lien ne designe
+ *   un projet qu'accompagne de son annee
+ *
+ * RECONDUCTION (v7.1) :
+ * - reconduct        : un projet vers une autre annee
+ * - reconduct-batch   : une selection entiere, en une seule ecriture groupee
+ * - Colonne Reconduit_De = "<annee source>/<ID source>" : trace la filiation
+ *   et empeche de reconduire deux fois le meme projet
+ * - Annee cible limitee a l'annee courante (tous) ou a la suivante
+ *   (direction uniquement) : cf. targetYearError()
+ *
+ * ONGLETS :
+ * - "Projets_<annee>"      (28 colonnes, un par annee scolaire)
+ * - "Commentaires_<annee>" (5 colonnes, un par annee scolaire)
+ * - "Utilisateurs"         (11 colonnes)
+ * - "Emails_Autorises"     (1 colonne)
+ * - "Logs"                 (10 colonnes)
  *
  * ROLES :
- * - admin        : Tout
- * - direction    : CRUD tous projets, corbeille, verrouillage
+ * - admin        : tout, y compris la modification des archives
+ * - direction    : CRUD tous projets, corbeille, verrouillage, ouverture de l'annee suivante
  * - vie_scolaire : CRUD "Clubs et activites" + "Projets de l'Internat"
- * - enseignant   : cree, modifie et supprime SES projets uniquement
+ * - enseignant   : cree, modifie et supprime SES projets (ou ceux dont il est referent)
+ *
+ * MIGRATION : migrateToYearlySheets() a ete executee le 05/06/2026.
+ * Ne pas la relancer ; elle est de toute facon sans effet si deja faite.
  */
 
 // Onglets non dates (inchanges par l'archivage annuel)
