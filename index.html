@@ -2868,7 +2868,7 @@ async function loadTrashList(){
         <div class="admin-card trash-card">
           <div class="trash-info">
             <strong>${esc(p.Nom_Projet||'Sans titre')}</strong>
-            <span class="trash-meta">${esc(p.Categorie||'')} · Supprimé par ${esc(p.Deleted_By||'?')} le ${p.Deleted_At||'?'}</span>
+            <span class="trash-meta">${esc(p.Categorie||'')} · Supprimé par ${esc(p.Deleted_By||'?')} le ${p.Deleted_Date?esc(fmt(p.Deleted_Date)):'?'}</span>
           </div>
           <div class="trash-actions">
             <button class="btn btn-add btn-xs" onclick="restoreProject('${jsq(p.ID_Projet)}')">Restaurer</button>
