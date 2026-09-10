@@ -28,25 +28,37 @@
 // Ne le faire que sur un classeur vide, en connaissance de cause.
 var AUTORISER_AMORCAGE_DESTRUCTIF = false;
 
+/**
+ * Garde-fou commun. Chaque fonction de ce fichier est lancable directement depuis
+ * le selecteur de fonctions de l'editeur Apps Script : proteger le seul point
+ * d'entree populateAllData() ne suffirait pas.
+ */
+function refuserSiNonAutorise(nomFonction) {
+  if (AUTORISER_AMORCAGE_DESTRUCTIF) return;
+  var msg = 'REFUS : ' + nomFonction + ' appartient au script d\'amorcage initial, '
+          + 'obsolete (onglets dates par annee depuis la v7) et destructeur '
+          + '(clearContent sur l\'onglet cible). Il ne doit pas etre execute sur '
+          + 'l\'installation en production. Pour ouvrir une nouvelle annee scolaire, '
+          + 'il n\'y a rien a executer : la bascule est automatique le 4 juillet. '
+          + 'Si vous savez vraiment ce que vous faites, passez '
+          + 'AUTORISER_AMORCAGE_DESTRUCTIF a true.';
+  Logger.log(msg);
+  throw new Error(msg);
+}
+
 function populateAllData() {
-  if (!AUTORISER_AMORCAGE_DESTRUCTIF) {
-    var msg = 'REFUS : populateAllData() efface le contenu de l\'onglet cible. '
-            + 'Ce script est obsolete (onglets datas par annee depuis v7) et ne doit pas '
-            + 'etre execute sur l\'installation en production. '
-            + 'Si vous savez ce que vous faites, passez AUTORISER_AMORCAGE_DESTRUCTIF a true.';
-    Logger.log(msg);
-    throw new Error(msg);
-  }
+  refuserSiNonAutorise('populateAllData()');
   populateProjets();
   populateUsers();
   populateEmailsAutorises();
   Logger.log('=== Initialisation complete ! ===');
   Logger.log('Projets inseres : voir onglet Projets');
-  Logger.log('Compte admin : admin@egd.mg / admin2025');
+  Logger.log('Compte admin : admin@egd.mg (mot de passe defini a la creation, non journalise).');
   Logger.log('Emails autorises : voir onglet Emails_Autorises');
 }
 
 function populateProjets() {
+  refuserSiNonAutorise('populateProjets()');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Projets');
   if (!sheet) {
@@ -550,6 +562,7 @@ function populateProjets() {
 }
 
 function populateUsers() {
+  refuserSiNonAutorise('populateUsers()');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Utilisateurs');
   if (!sheet) {
@@ -559,10 +572,11 @@ function populateUsers() {
 
   // Le compte admin est deja cree par initializeSheets()
   // On peut ajouter des comptes enseignants de demonstration si necessaire
-  Logger.log('Onglet Utilisateurs pret. Compte admin : admin@egd.mg / admin2025');
+  Logger.log('Onglet Utilisateurs pret. Compte admin : admin@egd.mg (mot de passe non journalise).');
 }
 
 function populateEmailsAutorises() {
+  refuserSiNonAutorise('populateEmailsAutorises()');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Emails_Autorises');
   if (!sheet) {
