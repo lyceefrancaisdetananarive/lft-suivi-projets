@@ -1,16 +1,42 @@
 /**
  * ============================================================
- * LFT - Initialisation des donnees
- * A executer UNE SEULE FOIS apres le deploiement de Code.gs
+ * LFT - Amorcage initial des donnees  ///  NE PLUS EXECUTER  ///
  * ============================================================
  *
- * 1. Collez ce code dans le meme projet Apps Script que Code.gs
- * 2. Executez la fonction initializeSheets() d'abord (depuis Code.gs)
- * 3. Puis executez la fonction populateAllData() ci-dessous
- * 4. Vous pouvez ensuite supprimer ce fichier
+ * ATTENTION - CE FICHIER EST CONSERVE POUR MEMOIRE, PAS POUR USAGE.
+ *
+ * Il servait a remplir un classeur VIDE lors de la creation du projet, en
+ * mars 2026. Il est aujourd'hui a la fois obsolete et destructeur :
+ *
+ *   - populateProjets() fait clearContent() sur l'onglet cible : l'executer
+ *     sur l'installation actuelle EFFACERAIT les projets reels ;
+ *   - il ecrit dans un onglet nomme "Projets", qui n'existe plus depuis
+ *     l'archivage par annee scolaire (les onglets sont Projets_<annee>) ;
+ *   - il recree un compte administrateur avec un mot de passe connu.
+ *
+ * Ce fichier n'est PAS deploye : le projet Apps Script ne contient que
+ * Code.gs. Il ne subsiste que dans le depot git, a titre d'historique.
+ *
+ * Pour ouvrir une nouvelle annee scolaire, il n'y a RIEN a executer :
+ * la bascule est automatique le 4 juillet et l'onglet de l'annee est cree
+ * a la premiere ecriture (voir ensureYearSheet dans Code.gs).
+ *
+ * Un garde-fou empeche toute execution accidentelle : voir ci-dessous.
  */
 
+// Passer a true SUPPRIME les donnees existantes de l'onglet cible.
+// Ne le faire que sur un classeur vide, en connaissance de cause.
+var AUTORISER_AMORCAGE_DESTRUCTIF = false;
+
 function populateAllData() {
+  if (!AUTORISER_AMORCAGE_DESTRUCTIF) {
+    var msg = 'REFUS : populateAllData() efface le contenu de l\'onglet cible. '
+            + 'Ce script est obsolete (onglets datas par annee depuis v7) et ne doit pas '
+            + 'etre execute sur l\'installation en production. '
+            + 'Si vous savez ce que vous faites, passez AUTORISER_AMORCAGE_DESTRUCTIF a true.';
+    Logger.log(msg);
+    throw new Error(msg);
+  }
   populateProjets();
   populateUsers();
   populateEmailsAutorises();

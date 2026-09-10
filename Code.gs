@@ -462,6 +462,9 @@ function doPost(e) {
       case 'unlock-project':       return handleUnlockProject(e);
       case 'reconduct':            return handleReconduct(e);
       case 'reconduct-batch':      return handleReconductBatch(e);
+      // Sauvegarde
+      case 'backup-now':           return handleBackupNow(e);
+      case 'backup-status':        return handleBackupStatus(e);
       // Commentaires
       case 'add-comment':          return handleAddComment(e);
       // Admin
@@ -1798,4 +1801,135 @@ function handleReconductBatch(e) {
     crees: crees, ignores: ignores, erreurs: erreurs,
     message: rows.length + ' projet(s) reconduit(s) vers ' + targetYear
   });
+}
+
+// ============================================================
+// SAUVEGARDE AUTOMATIQUE DU CLASSEUR
+// Le Google Sheet est la base de donnees : une suppression de ligne, une
+// colonne renommee ou une formule collee par erreur sont irreversibles une
+// fois l'historique Drive expire. On duplique donc le classeur entier chaque
+// nuit dans un dossier Drive, avec rotation.
+// ============================================================
+
+var BACKUP_FOLDER_NAME = 'LFT - Sauvegardes Suivi Projets';
+var BACKUP_KEEP        = 30;   // nombre de copies conservees (30 jours d'historique)
+var BACKUP_HOUR        = 2;    // heure de declenchement (nuit, Indian/Antananarivo)
+
+/** Dossier Drive des sauvegardes, cree au premier appel. */
+function getBackupFolder() {
+  var it = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER_NAME);
+}
+
+/**
+ * Copie le classeur complet dans le dossier de sauvegarde, puis purge les plus
+ * anciennes copies. Appelee par le declencheur nocturne et par l'action
+ * 'backup-now'. Retourne l'URL de la copie creee.
+ */
+function backupSpreadsheet() {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet();
+  var folder = getBackupFolder();
+  var stamp  = Utilities.formatDate(new Date(), 'Indian/Antananarivo', 'yyyy-MM-dd_HH-mm');
+  var nom    = 'LFT-Projets_' + stamp;
+
+  var copie = DriveApp.getFileById(ss.getId()).makeCopy(nom, folder);
+  var supprimees = pruneBackups(folder);
+
+  addLog('systeme', 'backup', 'backup_sheet',
+         'Sauvegarde ' + nom + (supprimees ? ' (' + supprimees + ' ancienne(s) purgee(s))' : ''));
+  return copie.getUrl();
+}
+
+/** Met a la corbeille les copies au-dela de BACKUP_KEEP, de la plus ancienne a la plus recente. */
+function pruneBackups(folder) {
+  var fichiers = [];
+  var it = folder.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.getName().indexOf('LFT-Projets_') === 0) {
+      fichiers.push({ f: f, d: f.getDateCreated().getTime() });
+    }
+  }
+  if (fichiers.length <= BACKUP_KEEP) return 0;
+  fichiers.sort(function(a, b) { return a.d - b.d; });   // plus ancienne en tete
+  var aSupprimer = fichiers.length - BACKUP_KEEP;
+  for (var i = 0; i < aSupprimer; i++) fichiers[i].f.setTrashed(true);
+  return aSupprimer;
+}
+
+/**
+ * Installe (ou reinstalle) le declencheur nocturne.
+ * A EXECUTER UNE FOIS depuis l'editeur Apps Script, apres avoir accorde
+ * l'autorisation Drive demandee au premier lancement.
+ */
+function installBackupTrigger() {
+  var existants = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < existants.length; i++) {
+    if (existants[i].getHandlerFunction() === 'backupSpreadsheet') {
+      ScriptApp.deleteTrigger(existants[i]);
+    }
+  }
+  ScriptApp.newTrigger('backupSpreadsheet').timeBased().atHour(BACKUP_HOUR).everyDays(1).create();
+  var url = backupSpreadsheet();   // une premiere sauvegarde immediate, pour verifier que tout passe
+  Logger.log('Declencheur installe (chaque nuit vers ' + BACKUP_HOUR + 'h).');
+  Logger.log('Premiere sauvegarde : ' + url);
+  return url;
+}
+
+/** Etat des sauvegardes : nombre, date de la plus recente. Utilise par handleBackupNow. */
+function backupStatus() {
+  var folder = getBackupFolder();
+  var n = 0, derniere = null;
+  var it = folder.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.getName().indexOf('LFT-Projets_') !== 0) continue;
+    n++;
+    var d = f.getDateCreated();
+    if (!derniere || d > derniere) derniere = d;
+  }
+  return {
+    nombre: n,
+    derniere: derniere ? Utilities.formatDate(derniere, 'Indian/Antananarivo', 'yyyy-MM-dd HH:mm') : null,
+    declencheur_actif: hasBackupTrigger()
+  };
+}
+
+function hasBackupTrigger() {
+  var t = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < t.length; i++) {
+    if (t[i].getHandlerFunction() === 'backupSpreadsheet') return true;
+  }
+  return false;
+}
+
+/**
+ * POST 'backup-now' (admin) : sauvegarde a la demande, avant une operation a
+ * risque comme une reconduction en lot ou une purge de corbeille.
+ */
+function handleBackupNow(e) {
+  var user = getAuthUser(e);
+  if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin uniquement' });
+  try {
+    var url = backupSpreadsheet();
+    var st  = backupStatus();
+    addLog(user.email, user.role, 'backup_manuel', 'Sauvegarde declenchee manuellement');
+    return jsonResponse({ success: true, message: 'Sauvegarde effectuee', url: url, etat: st });
+  } catch (err) {
+    // Cause la plus frequente : l'autorisation Drive n'a jamais ete accordee
+    return jsonResponse({ success: false,
+      error: 'Sauvegarde impossible : ' + err.toString() +
+             " — executez installBackupTrigger() une fois depuis l'editeur Apps Script pour accorder l'acces a Drive." });
+  }
+}
+
+/** POST 'backup-status' (admin) : etat des sauvegardes, sans rien creer. */
+function handleBackupStatus(e) {
+  var user = getAuthUser(e);
+  if (!isAdmin(user)) return jsonResponse({ success: false, error: 'Acces refuse - Admin uniquement' });
+  try {
+    return jsonResponse({ success: true, etat: backupStatus() });
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.toString() });
+  }
 }
