@@ -40,8 +40,10 @@ var SESSION_HOURS  = 8;
 
 var VS_CATS = ['Clubs et activités', "Projets de l'Internat"];
 
-// En-tetes de l'onglet Projets (27 colonnes) — reference unique
-var PROJETS_HEADERS = ['ID_Projet','Nom_Projet','Categorie','Echelle','Axe_Projet_Etablissement','Sous_Axe','Disciplines_Mobilisees','Niveaux_Concernes','Description','Objectifs_Pedagogiques','Statut','Priorite','Date_Debut','Date_Fin','Partenariats','Ressources_Necessaires','Modalite_Valorisation','Enseignant_Referent','Created_By','Deleted','Deleted_By','Deleted_Date','Locked','Locked_By','Locked_Date','Last_Modified_By','Last_Modified_Date'];
+// En-tetes de l'onglet Projets (28 colonnes) — reference unique
+// Reconduit_De : "<annee source>/<ID source>", trace la filiation d'un projet reconduit
+// et permet de ne pas le reconduire deux fois.
+var PROJETS_HEADERS = ['ID_Projet','Nom_Projet','Categorie','Echelle','Axe_Projet_Etablissement','Sous_Axe','Disciplines_Mobilisees','Niveaux_Concernes','Description','Objectifs_Pedagogiques','Statut','Priorite','Date_Debut','Date_Fin','Partenariats','Ressources_Necessaires','Modalite_Valorisation','Enseignant_Referent','Created_By','Deleted','Deleted_By','Deleted_Date','Locked','Locked_By','Locked_Date','Last_Modified_By','Last_Modified_Date','Reconduit_De'];
 
 // ============================================================
 // ANNEE SCOLAIRE — bascule automatique le 4 juillet
@@ -95,8 +97,21 @@ function ensureYearSheet(year) {
     sh.getRange(1, 1, 1, PROJETS_HEADERS.length).setValues([PROJETS_HEADERS]);
     sh.getRange(1, 1, 1, PROJETS_HEADERS.length).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
     sh.setFrozenRows(1);
+  } else {
+    ensureColumn(sh, 'Reconduit_De'); // onglets crees avant la v7.1
   }
   return sh;
+}
+
+/** Ajoute une colonne en fin d'onglet si elle n'existe pas deja. Retourne son index (0-base). */
+function ensureColumn(sheet, colName) {
+  var lastCol  = sheet.getLastColumn();
+  var headers  = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var idx      = headers.indexOf(colName);
+  if (idx >= 0) return idx;
+  sheet.getRange(1, lastCol + 1).setValue(colName)
+       .setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
+  return lastCol; // 0-base de la nouvelle colonne
 }
 
 /** Onglet Commentaires de l'annee, cree si absent. */
@@ -341,24 +356,11 @@ function emailAlreadyRegistered(email) {
 }
 
 function generateProjectId(categorie, sheet) {
-  // sheet = onglet de l'annee cible (numerotation repart a 001 par annee)
+  // sheet = onglet de l'annee cible (la numerotation repart a 001 chaque annee)
   if (!sheet) sheet = ensureYearSheet(currentSchoolYear());
-  var data  = sheet.getDataRange().getValues();
-  var prefix  = 'LFT';
-  if (categorie && categorie.indexOf('AEFE') >= 0)          prefix = 'AEFE';
-  else if (categorie && categorie.indexOf('Zone') >= 0)     prefix = 'ZOI';
-  else if (categorie && categorie.indexOf('institution') >= 0) prefix = 'INST';
-  else if (categorie && categorie.indexOf('Clubs') >= 0)    prefix = 'CLUB';
-  else if (categorie && categorie.indexOf('Internat') >= 0) prefix = 'INT';
-  var maxNum = 0;
-  for (var i = 1; i < data.length; i++) {
-    var id = data[i][0] ? data[i][0].toString() : '';
-    if (id.indexOf(prefix + '-') === 0) {
-      var num = parseInt(id.split('-')[1]);
-      if (num > maxNum) maxNum = num;
-    }
-  }
-  return prefix + '-' + ('000' + (maxNum + 1)).slice(-3);
+  var prefix   = prefixForCategory(categorie); // meme regle que la reconduction
+  var counters = buildIdCounters(sheet.getDataRange().getValues());
+  return prefix + '-' + ('000' + ((counters[prefix] || 0) + 1)).slice(-3);
 }
 
 function addLog(email, role, action, detail, deviceInfo) {
@@ -441,6 +443,7 @@ function doPost(e) {
       case 'lock-project':         return handleLockProject(e);
       case 'unlock-project':       return handleUnlockProject(e);
       case 'reconduct':            return handleReconduct(e);
+      case 'reconduct-batch':      return handleReconductBatch(e);
       // Commentaires
       case 'add-comment':          return handleAddComment(e);
       // Admin
@@ -1319,6 +1322,9 @@ function handleAdd(e) {
     if (isVieScolaire(user) && !isVsCat(body['Categorie']))
       return jsonResponse({ success: false, error: 'Vie scolaire : creation limitee a vos categories' });
     body['ID_Projet']          = generateProjectId(body['Categorie'], sheet);
+    // Le formulaire ne saisit pas le statut (il est recalcule a l'affichage depuis les
+    // dates) : sans valeur par defaut la colonne reste vide dans la feuille et l'export.
+    if (!body['Statut']) body['Statut'] = 'Planifié';
     body['Created_By']         = user.email;
     body['Deleted']            = '';
     body['Deleted_By']         = '';
@@ -1542,6 +1548,95 @@ function handleListYears(e) {
 // RECONDUCT (POST) — duplique un projet vers une autre annee
 // ============================================================
 
+/** Annee scolaire suivant celle passee : "2026-2027" -> "2027-2028". */
+function nextSchoolYearOf(y) {
+  var p = String(y).split('-');
+  if (p.length !== 2) return y;
+  return (parseInt(p[0], 10) + 1) + '-' + (parseInt(p[1], 10) + 1);
+}
+
+/**
+ * Controle l'annee cible d'une reconduction.
+ * On n'autorise que l'annee courante (cas normal de la rentree) ou l'annee suivante,
+ * cette derniere reservee a la direction : un enseignant ne doit pas pouvoir creer par
+ * megarde un onglet d'annee, aussitot publie a tous les visiteurs par list-years.
+ * Retourne null si autorise, sinon le message d'erreur.
+ */
+function targetYearError(user, targetYear) {
+  var cur = currentSchoolYear();
+  if (targetYear === cur) return null;
+  if (targetYear === nextSchoolYearOf(cur)) {
+    return isAdminOrDirection(user) ? null
+      : "Seules la direction et l'administration peuvent ouvrir l'annee " + targetYear + '.';
+  }
+  return "Annee cible non autorisee (" + targetYear + "). La reconduction vise " + cur + '.';
+}
+
+/** Index des projets deja reconduits dans l'onglet cible : cle "<annee>/<ID source>". */
+function buildReconductIndex(tgtData, tgtHeaders) {
+  var idx = tgtHeaders.indexOf('Reconduit_De');
+  var seen = {};
+  if (idx < 0) return seen;
+  for (var i = 1; i < tgtData.length; i++) {
+    var v = tgtData[i][idx];
+    if (v) seen[v.toString()] = true;
+  }
+  return seen;
+}
+
+/**
+ * Compteurs de numerotation par prefixe pour un onglet donne, calcules une seule fois.
+ * Evite de relire toute la feuille a chaque projet lors d'une reconduction en lot.
+ */
+function buildIdCounters(tgtData) {
+  var max = {};
+  for (var i = 1; i < tgtData.length; i++) {
+    var id = tgtData[i][0] ? tgtData[i][0].toString() : '';
+    var m  = id.split('-');
+    if (m.length === 2) {
+      var n = parseInt(m[1], 10);
+      if (!isNaN(n) && (!max[m[0]] || n > max[m[0]])) max[m[0]] = n;
+    }
+  }
+  return max;
+}
+
+function prefixForCategory(categorie) {
+  if (categorie && categorie.indexOf('AEFE') >= 0)          return 'AEFE';
+  if (categorie && categorie.indexOf('Zone') >= 0)          return 'ZOI';
+  if (categorie && categorie.indexOf('institution') >= 0)   return 'INST';
+  if (categorie && categorie.indexOf('Clubs') >= 0)         return 'CLUB';
+  if (categorie && categorie.indexOf('Internat') >= 0)      return 'INT';
+  return 'LFT';
+}
+
+/** Construit la ligne du projet reconduit, sans l'ecrire. */
+function buildReconductedRow(src, srcHeaders, tgtHeaders, user, sourceYear, sourceId, newId) {
+  var copy = {};
+  for (var h = 0; h < srcHeaders.length; h++) copy[srcHeaders[h]] = src[h];
+  var reset = {
+    'ID_Projet': newId,
+    'Statut': 'Planifié',
+    'Date_Debut': '', 'Date_Fin': '',
+    'Created_By': user.email,
+    'Deleted': '', 'Deleted_By': '', 'Deleted_Date': '',
+    'Locked': '', 'Locked_By': '', 'Locked_Date': '',
+    'Last_Modified_By': user.email,
+    'Last_Modified_Date': nowStr(),
+    'Reconduit_De': sourceYear + '/' + sourceId
+  };
+  return tgtHeaders.map(function(col) {
+    if (reset.hasOwnProperty(col)) return sanitizeCell(reset[col]);
+    var v = copy.hasOwnProperty(col) ? copy[col] : '';
+    if (v instanceof Date) v = Utilities.formatDate(v, 'Indian/Antananarivo', 'yyyy-MM-dd');
+    return sanitizeCell(v !== undefined && v !== null ? v.toString() : '');
+  });
+}
+
+// ------------------------------------------------------------
+// Reconduction unitaire
+// ------------------------------------------------------------
+
 function handleReconduct(e) {
   var user = getAuthUser(e);
   if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
@@ -1551,64 +1646,138 @@ function handleReconduct(e) {
   var sourceId   = (body.id || '').trim();
   var sourceYear = (body.sourceYear || '').trim() || currentSchoolYear();
   var targetYear = (body.targetYear || '').trim() || currentSchoolYear();
+  var force      = body.force === true;
 
   if (!sourceId) return jsonResponse({ success: false, error: 'Projet source requis' });
 
-  // L'annee cible ne doit pas etre archivee (sauf admin)
-  if (isArchivedYear(targetYear) && !isAdmin(user))
-    return jsonResponse({ success: false, error: "L'annee cible est archivee. Seul l'administrateur peut y ajouter un projet." });
+  var yErr = targetYearError(user, targetYear);
+  if (yErr) return jsonResponse({ success: false, error: yErr });
 
-  var ss     = SpreadsheetApp.getActiveSpreadsheet();
-  var srcSh  = ss.getSheetByName(projetsSheetName(sourceYear));
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var srcSh = ss.getSheetByName(projetsSheetName(sourceYear));
   if (!srcSh) return jsonResponse({ success: false, error: 'Annee source introuvable' });
 
-  var data    = srcSh.getDataRange().getValues();
-  var headers = data[0];
-  var idIdx   = headers.indexOf('ID_Projet');
+  var data       = srcSh.getDataRange().getValues();
+  var srcHeaders = data[0];
+  var idIdx      = srcHeaders.indexOf('ID_Projet');
 
-  // Localiser le projet source
   var src = null;
   for (var i = 1; i < data.length; i++) {
     if (data[i][idIdx] === sourceId) { src = data[i]; break; }
   }
   if (!src) return jsonResponse({ success: false, error: 'Projet source introuvable' });
 
-  // Vie scolaire : limitee a ses categories
-  var catIdx = headers.indexOf('Categorie');
+  var catIdx = srcHeaders.indexOf('Categorie');
   var srcCat = catIdx >= 0 ? (src[catIdx] || '').toString() : '';
   if (isVieScolaire(user) && !isVsCat(srcCat))
     return jsonResponse({ success: false, error: 'Vie scolaire : reconduction limitee a vos categories' });
 
-  // Construire le nouveau projet : copie du contenu, dates videes, statut Planifie
-  var tgtSh = ensureYearSheet(targetYear);
-  var tgtHeaders = tgtSh.getRange(1, 1, 1, tgtSh.getLastColumn()).getValues()[0];
+  var tgtSh      = ensureYearSheet(targetYear);
+  var tgtData    = tgtSh.getDataRange().getValues();
+  var tgtHeaders = tgtData[0];
 
-  var copyFromSource = {}; // valeurs de contenu copiees
-  for (var h = 0; h < headers.length; h++) copyFromSource[headers[h]] = src[h];
+  // Deja reconduit ? On previent plutot que de creer un doublon silencieux.
+  var seen = buildReconductIndex(tgtData, tgtHeaders);
+  if (!force && seen[sourceYear + '/' + sourceId]) {
+    return jsonResponse({ success: false, already: true,
+      error: 'Ce projet a deja ete reconduit en ' + targetYear + '.' });
+  }
 
-  var newId = generateProjectId(srcCat, tgtSh);
-  var resetFields = {
-    'ID_Projet': newId,
-    'Statut': 'Planifié',
-    'Date_Debut': '',
-    'Date_Fin': '',
-    'Created_By': user.email,
-    'Deleted': '', 'Deleted_By': '', 'Deleted_Date': '',
-    'Locked': '', 'Locked_By': '', 'Locked_Date': '',
-    'Last_Modified_By': user.email,
-    'Last_Modified_Date': nowStr()
-  };
+  var counters = buildIdCounters(tgtData);
+  var prefix   = prefixForCategory(srcCat);
+  var newId    = prefix + '-' + ('000' + ((counters[prefix] || 0) + 1)).slice(-3);
 
-  var newRow = tgtHeaders.map(function(col) {
-    if (resetFields.hasOwnProperty(col)) return sanitizeCell(resetFields[col]);
-    var v = copyFromSource.hasOwnProperty(col) ? copyFromSource[col] : '';
-    if (v instanceof Date) v = Utilities.formatDate(v, 'Indian/Antananarivo', 'yyyy-MM-dd');
-    return sanitizeCell(v !== undefined && v !== null ? v.toString() : '');
-  });
-  tgtSh.appendRow(newRow);
+  tgtSh.appendRow(buildReconductedRow(src, srcHeaders, tgtHeaders, user, sourceYear, sourceId, newId));
 
-  var nomIdx = headers.indexOf('Nom_Projet');
+  var nomIdx    = srcHeaders.indexOf('Nom_Projet');
   var nomProjet = nomIdx >= 0 ? (src[nomIdx] || '').toString() : sourceId;
-  addLog(user.email, user.role, 'reconduct_project', 'Reconduit ' + sourceId + ' (' + sourceYear + ') -> ' + newId + ' (' + targetYear + ') : ' + nomProjet, di);
+  addLog(user.email, user.role, 'reconduct_project',
+    'Reconduit ' + sourceId + ' (' + sourceYear + ') -> ' + newId + ' (' + targetYear + ') : ' + nomProjet, di);
   return jsonResponse({ success: true, message: 'Projet reconduit pour ' + targetYear, id: newId, year: targetYear });
+}
+
+// ------------------------------------------------------------
+// Reconduction en lot — une seule requete, une seule ecriture
+// ------------------------------------------------------------
+
+function handleReconductBatch(e) {
+  var user = getAuthUser(e);
+  if (!user) return jsonResponse({ success: false, error: 'Authentification requise' });
+  var di = extractDeviceInfo(e);
+
+  var body       = JSON.parse(e.postData.contents);
+  var ids        = body.ids || [];
+  var sourceYear = (body.sourceYear || '').trim();
+  var targetYear = (body.targetYear || '').trim() || currentSchoolYear();
+
+  if (!ids.length)   return jsonResponse({ success: false, error: 'Aucun projet selectionne' });
+  if (ids.length > 200) return jsonResponse({ success: false, error: 'Trop de projets en une fois (200 maximum)' });
+  if (!sourceYear)   return jsonResponse({ success: false, error: 'Annee source requise' });
+  if (sourceYear === targetYear) return jsonResponse({ success: false, error: "L'annee source et l'annee cible sont identiques" });
+
+  var yErr = targetYearError(user, targetYear);
+  if (yErr) return jsonResponse({ success: false, error: yErr });
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var srcSh = ss.getSheetByName(projetsSheetName(sourceYear));
+  if (!srcSh) return jsonResponse({ success: false, error: 'Annee source introuvable' });
+
+  var data       = srcSh.getDataRange().getValues();
+  var srcHeaders = data[0];
+  var idIdx      = srcHeaders.indexOf('ID_Projet');
+  var catIdx     = srcHeaders.indexOf('Categorie');
+  var nomIdx     = srcHeaders.indexOf('Nom_Projet');
+  var delIdx     = srcHeaders.indexOf('Deleted');
+
+  // Index des lignes source par identifiant
+  var byId = {};
+  for (var i = 1; i < data.length; i++) {
+    if (delIdx >= 0 && data[i][delIdx] && data[i][delIdx].toString() === '1') continue; // exclut la corbeille
+    if (data[i][idIdx]) byId[data[i][idIdx].toString()] = data[i];
+  }
+
+  var tgtSh      = ensureYearSheet(targetYear);
+  var tgtData    = tgtSh.getDataRange().getValues();
+  var tgtHeaders = tgtData[0];
+  var seen       = buildReconductIndex(tgtData, tgtHeaders);
+  var counters   = buildIdCounters(tgtData);
+
+  var rows = [], crees = [], ignores = [], erreurs = [];
+
+  for (var k = 0; k < ids.length; k++) {
+    var sid = String(ids[k]).trim();
+    var src = byId[sid];
+    if (!src) { erreurs.push({ id: sid, motif: 'introuvable dans ' + sourceYear }); continue; }
+
+    var cat = catIdx >= 0 ? (src[catIdx] || '').toString() : '';
+    if (isVieScolaire(user) && !isVsCat(cat)) {
+      erreurs.push({ id: sid, motif: 'hors de vos categories' }); continue;
+    }
+    if (seen[sourceYear + '/' + sid]) {
+      ignores.push({ id: sid, motif: 'deja reconduit' }); continue;
+    }
+
+    var prefix = prefixForCategory(cat);
+    counters[prefix] = (counters[prefix] || 0) + 1;
+    var newId = prefix + '-' + ('000' + counters[prefix]).slice(-3);
+
+    rows.push(buildReconductedRow(src, srcHeaders, tgtHeaders, user, sourceYear, sid, newId));
+    seen[sourceYear + '/' + sid] = true;
+    crees.push({ id: newId, source: sid, nom: nomIdx >= 0 ? (src[nomIdx] || '').toString() : sid });
+  }
+
+  // Une seule ecriture groupee : indispensable pour tenir dans le temps d'execution GAS
+  if (rows.length) {
+    tgtSh.getRange(tgtSh.getLastRow() + 1, 1, rows.length, tgtHeaders.length).setValues(rows);
+  }
+
+  addLog(user.email, user.role, 'reconduct_batch',
+    rows.length + ' projet(s) reconduit(s) de ' + sourceYear + ' vers ' + targetYear +
+    ' (' + ignores.length + ' ignore(s), ' + erreurs.length + ' en erreur)', di);
+
+  return jsonResponse({
+    success: true, year: targetYear,
+    crees: crees, ignores: ignores, erreurs: erreurs,
+    message: rows.length + ' projet(s) reconduit(s) vers ' + targetYear
+  });
 }

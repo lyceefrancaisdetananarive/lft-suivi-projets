@@ -247,6 +247,23 @@ nav {
 .year-opt .yo-tag.arc { background:rgba(234,179,8,.18); color:#a16207; }
 .year-opt .yo-tag.fut { background:rgba(124,58,237,.14); color:#6d28d9; }
 
+/* Encart d'état du tableau de bord (année vide, début d'année, échec de chargement) */
+.state-notice {
+  display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
+  margin-bottom:1.5rem; padding:1rem 1.2rem;
+  background:rgba(255,255,255,.6); border:1px solid var(--b1);
+  border-left:4px solid var(--aefe-blue); border-radius:var(--r-md);
+  backdrop-filter:blur(16px) saturate(180%); -webkit-backdrop-filter:blur(16px) saturate(180%);
+  box-shadow:0 2px 10px rgba(0,30,80,.05);
+}
+.state-notice .sn-ico { font-size:1.5rem; color:var(--aefe-blue); flex-shrink:0; line-height:1; }
+.state-notice strong { display:block; font-size:.92rem; color:var(--t0); margin-bottom:.15rem; }
+.state-notice span { font-size:.83rem; color:var(--t2); line-height:1.5; }
+.state-notice > div:nth-child(2) { flex:1; min-width:220px; }
+.state-notice .btn { flex-shrink:0; }
+.state-notice.sn-err { border-left-color:#dc2626; background:rgba(239,68,68,.06); }
+.state-notice.sn-err .sn-ico { color:#dc2626; }
+
 /* Bandeau « archive lecture seule » */
 .archive-banner {
   display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
@@ -970,6 +987,38 @@ nav {
   padding:2rem; position:relative;
 }
 .modal.modal-lg { max-width:660px; }
+
+/* ── Reconduction en lot ── */
+.batch-toolbar {
+  display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
+  padding:.6rem .75rem; margin-bottom:.75rem;
+  background:var(--g1); border:1px solid var(--b1); border-radius:var(--r-md);
+}
+.batch-toolbar select {
+  padding:.35rem .6rem; border-radius:var(--r-sm); border:1px solid var(--b2);
+  background:var(--g3); font-family:inherit; font-size:.8rem;
+}
+.batch-count { margin-left:auto; font-size:.8rem; font-weight:700; color:var(--aefe-blue); }
+.batch-list { max-height:46vh; overflow-y:auto; display:flex; flex-direction:column; gap:.35rem; padding-right:.25rem; }
+.batch-item {
+  display:flex; align-items:flex-start; gap:.6rem;
+  padding:.5rem .65rem; border-radius:var(--r-sm);
+  background:var(--g2); border:1px solid var(--b0);
+}
+.batch-item.is-done { opacity:.55; }
+.batch-item input[type=checkbox] { margin-top:.15rem; width:16px; height:16px; flex-shrink:0; cursor:pointer; }
+.batch-item label { flex:1; cursor:pointer; font-size:.84rem; line-height:1.35; }
+.batch-item .bi-meta { display:block; font-size:.72rem; color:var(--t3); margin-top:.15rem; }
+.batch-done-tag {
+  font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+  background:rgba(22,163,74,.16); color:#15803d; padding:.1rem .4rem; border-radius:999px;
+  white-space:nowrap;
+}
+.batch-report { font-size:.85rem; line-height:1.6; }
+.batch-report ul { margin:.4rem 0 .8rem 1.1rem; }
+.batch-report .ok  { color:#15803d; font-weight:700; }
+.batch-report .warn{ color:#a16207; font-weight:700; }
+.batch-report .err { color:#dc2626; font-weight:700; }
 .modal h2 {
   font-family:'Spectral',Georgia,serif;
   font-size:1.2rem; font-weight:700; color:var(--t0); margin-bottom:1.2rem;
@@ -1444,6 +1493,14 @@ footer a:hover { color:var(--aefe-magenta); }
   </div>
 </div>
 
+<!-- RECONDUCTION EN LOT -->
+<div class="overlay" id="batch-ov">
+  <div class="modal modal-lg">
+    <button class="modal-close" onclick="closeBatch()">✕</button>
+    <div id="batch-body"></div>
+  </div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════════════════
    CONFIG
@@ -1571,8 +1628,19 @@ function editableYear(){ return S.year >= S.currentYear ? S.year : S.currentYear
 function canWriteYear(){ return !isArchive() || (S.user && S.user.role==='admin'); }
 /* Année scolaire suivante : "2025-2026" → "2026-2027". */
 function nextSchoolYear(y){ const [a,b]=(y||S.year).split('-').map(Number); return a+1+'-'+(b+1); }
-/* Année cible d'une reconduction : depuis une archive → année courante ; sinon → année suivante. */
+/* Année cible d'une reconduction : depuis une archive → l'année courante (cas de la
+   rentrée) ; depuis l'année courante → l'année suivante, qu'on ouvre alors en préparation. */
 function reconductTarget(){ return isArchive() ? S.currentYear : nextSchoolYear(S.year); }
+/* Qui peut reconduire depuis la vue actuelle ?
+   Reprendre un projet archivé : tout utilisateur connecté.
+   Ouvrir l'année suivante : direction et administration seulement — un onglet d'année créé
+   par mégarde devient aussitôt visible de tous les visiteurs et n'est pas rattrapable
+   depuis l'application. Le serveur applique la même règle (targetYearError). */
+function canReconduct(){
+  if(!S.user) return false;
+  if(isArchive()) return true;
+  return S.user.role==='admin'||S.user.role==='direction';
+}
 
 function loadSession(){
   try {
@@ -1666,10 +1734,14 @@ async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({.
 async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({...(b||{}),..._auth()}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
 
 async function loadProjects(){
+  // Ne jamais conserver la liste de l'année précédente en cas d'échec : on afficherait
+  // les projets d'une année sous le millésime d'une autre. S.loadError permet de
+  // distinguer « année vide » et « chargement impossible ».
   try {
     const d=await apiGet({action:'list',table:'Projets',year:S.year});
-    if(d.success) S.projects=d.data||[];
-  } catch(e){ S.projects=[]; }
+    if(d && d.success){ S.projects=d.data||[]; S.loadError=false; }
+    else { S.projects=[]; S.loadError=true; }
+  } catch(e){ S.projects=[]; S.loadError=true; }
 }
 
 /* Liste des années scolaires disponibles (alimente le sélecteur du nav). */
@@ -1749,16 +1821,61 @@ function updateYearLabels(){
   if(fy) fy.textContent = 'Année scolaire ' + S.year + (isArchive()?' (archive)':'');
 }
 
+/* Encart d'état du tableau de bord.
+   Sans lui, une année qui démarre (2 projets, tuiles à 0) est indiscernable d'une
+   application en panne — et rien n'indique que l'année précédente reste consultable. */
+function stateNoticeHTML(){
+  // 1. Le chargement a échoué : ne pas laisser croire à une année vide
+  if(S.loadError){
+    return `<div class="state-notice sn-err">
+      <div class="sn-ico"><i class="ph-bold ph-warning-circle"></i></div>
+      <div><strong>Impossible de charger les projets.</strong>
+      <span>Vérifiez votre connexion, puis rechargez la page. Les données ne sont pas perdues.</span></div>
+      <button class="btn btn-ghost btn-xs" onclick="location.reload()">Recharger</button></div>`;
+  }
+  const anterieures=(S.years||[]).filter(y=>y<S.year).sort().reverse();
+  const precedente=anterieures[0]||null;
+  // 2. Année réellement vide
+  if(!S.projects.length){
+    return `<div class="state-notice">
+      <div class="sn-ico"><i class="ph-bold ph-folder-open"></i></div>
+      <div><strong>Aucun projet en ${esc(S.year)} pour l'instant.</strong>
+      <span>${precedente
+        ? `Les projets de ${esc(precedente)} restent consultables : changez d'année dans le menu en haut à droite.`
+        : `Créez un premier projet pour lancer l'année.`}</span></div>
+      ${precedente?`<button class="btn btn-ghost btn-xs" onclick="switchYear('${jsq(precedente)}')">Voir ${esc(precedente)}</button>`:''}
+      ${canAdd()?`<button class="btn btn-add btn-xs" onclick="openAddForm()">+ Nouveau projet</button>`:''}
+    </div>`;
+  }
+  // 3. Début d'année : peu de projets alors qu'une année précédente est fournie
+  if(!isArchive() && S.projects.length<5 && precedente){
+    return `<div class="state-notice">
+      <div class="sn-ico"><i class="ph-bold ph-confetti"></i></div>
+      <div><strong>L'année ${esc(S.year)} démarre.</strong>
+      <span>${S.projects.length} projet(s) déclaré(s). Les projets de ${esc(precedente)} sont
+      consultables via le sélecteur d'année${canReconduct()?', et peuvent être repris ici en une fois':''}.</span></div>
+      ${canReconduct()
+        ? `<button class="btn btn-add btn-xs" onclick="switchYear('${jsq(precedente)}').then(openReconductBatch)">♻️ Reprendre des projets de ${esc(precedente)}</button>`
+        : `<button class="btn btn-ghost btn-xs" onclick="switchYear('${jsq(precedente)}')">Voir ${esc(precedente)}</button>`}
+    </div>`;
+  }
+  return '';
+}
+
 /* Bandeau d'archive (affiché sous le fil d'Ariane sur toutes les pages). */
 function updateArchiveBar(){
   const bar=document.getElementById('archive-bar');
   if(!bar) return;
   if(isArchive()){
-    const adminNote = (S.user && S.user.role==='admin')
+    const suite = (S.user && S.user.role==='admin')
       ? " En tant qu'administrateur, vous pouvez encore la modifier."
-      : " Les projets y sont consultables mais non modifiables.";
+      : (canReconduct()
+          ? ` Les fiches ne sont plus modifiables, mais vous pouvez reprendre un projet pour ${esc(S.currentYear)}.`
+          : " Les projets y sont consultables mais non modifiables.");
     bar.innerHTML=`<div class="archive-banner"><i class="ph-bold ph-archive"></i>
-      <span><strong>Archive ${esc(S.year)}</strong> — année scolaire clôturée.${adminNote}</span></div>`;
+      <span><strong>Archive ${esc(S.year)}</strong> — année scolaire clôturée.${suite}</span>
+      ${canReconduct()?`<button class="btn btn-ghost btn-xs" style="margin-left:auto"
+        onclick="openReconductBatch()">♻️ Reprendre des projets</button>`:''}</div>`;
   } else {
     bar.innerHTML='';
   }
@@ -2175,11 +2292,14 @@ function renderDashboard(){
       </div>
     </section>
 
+    ${stateNoticeHTML()}
+
     <!-- SECTION HEADER -->
     <div class="sec-hd">
       <div class="sec-title">Catégories de projets</div>
       <div class="sec-actions">
         ${isAdDir?`<button class="btn btn-back" onclick="doExport()" style="text-decoration:none"><i class="ph ph-download-simple"></i> Exporter CSV</button>`:''}
+        ${canReconduct()?`<button class="btn btn-back" onclick="openReconductBatch()">♻️ Reconduire vers ${esc(reconductTarget())}</button>`:''}
         ${canAdd()?`<button class="btn btn-add" onclick="openAddForm()">+ Nouveau projet</button>`:''}
       </div>
     </div>
@@ -2202,7 +2322,7 @@ function renderDashboard(){
         <div class="tile-icon"><i class="ph-bold ph-calendar-dots"></i></div>
         <div class="tile-name">Suivi Chronologique</div>
         <p class="tile-desc">Calendrier des projets et événements de l'année scolaire</p>
-        <span class="tile-chip tc-white">Sept. 2025 → Juin 2026</span>
+        <span class="tile-chip tc-white">Sept. ${esc(S.year.split('-')[0])} → Juin ${esc(S.year.split('-')[1])}</span>
       </div>
     </div>
 
@@ -2479,7 +2599,7 @@ function renderDetail(p){
 
       <div class="detail-actions">
         ${showEdit?`<button class="btn btn-add" onclick="openEditForm('${jsq(p.ID_Projet)}')">✏️ Modifier</button>`:''}
-        ${S.user?`<button class="btn btn-primary" onclick="doReconduct('${jsq(p.ID_Projet)}')">♻️ Reconduire pour ${esc(reconductTarget())}</button>`:''}
+        ${canReconduct()?`<button class="btn btn-primary" onclick="doReconduct('${jsq(p.ID_Projet)}')">♻️ Reconduire pour ${esc(reconductTarget())}</button>`:''}
         ${isAdDir&&canWriteYear()?`<button class="btn btn-back" onclick="toggleLock('${jsq(p.ID_Projet)}',${isLocked?0:1})">${isLocked?'🔓 Déverrouiller':'🔒 Verrouiller'}</button>`:''}
         ${cDel?`<button class="btn btn-danger" onclick="delProject('${jsq(p.ID_Projet)}')">🗑️ Supprimer</button>`:''}
         <button class="btn btn-back" onclick="history.back()">← Retour</button>
@@ -2559,6 +2679,153 @@ async function doReconduct(id){
     },
     {okLabel:'♻️ Reconduire le projet', okStyle:'primary'}
   );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RECONDUCTION EN LOT
+   Reprendre une année entière fiche par fiche n'est pas tenable (73 projets en
+   2025-2026). Cet écran permet de cocher les projets à reprendre et de les envoyer
+   en une seule requête ; le serveur écrit toutes les lignes d'un coup.
+═══════════════════════════════════════════════════════════ */
+/* La sélection vit dans _batch.selected, pas dans le DOM : la liste est reconstruite à
+   chaque changement de filtre, ce qui décocherait tout ce qui a été coché avant. */
+let _batch={source:'',target:'',items:[],selected:new Set()};
+
+function closeBatch(){ document.getElementById('batch-ov').classList.remove('open'); }
+
+async function openReconductBatch(){
+  if(!S.user){ openLogin(); return; }
+  if(!canReconduct()){ toast("Seules la direction et l'administration peuvent ouvrir l'année suivante.",'🔒'); return; }
+  const source=S.year, target=reconductTarget();
+  _batch={source,target,items:[],selected:new Set()};
+
+  const ov=document.getElementById('batch-ov');
+  const body=document.getElementById('batch-body');
+  body.innerHTML=`<h2>♻️ Reconduire vers ${esc(target)}</h2>
+    <div class="loader"><div class="spin"></div> Lecture de ${esc(target)}…</div>`;
+  ov.classList.add('open');
+
+  // Repérer ce qui a déjà été repris, pour ne pas créer de doublons
+  let deja=new Set();
+  try{
+    const d=await apiGet({action:'list',year:target});
+    if(d && d.success) (d.data||[]).forEach(p=>{ if(p.Reconduit_De) deja.add(p.Reconduit_De); });
+  }catch(e){ /* l'année cible peut être vide : on continue */ }
+
+  _batch.items=S.projects.map(p=>({
+    id:p.ID_Projet, nom:p.Nom_Projet||'Sans titre', cat:p.Categorie||'',
+    ref:p.Enseignant_Referent||'', deja:deja.has(source+'/'+p.ID_Projet)
+  }));
+  renderBatchList();
+}
+
+function renderBatchList(){
+  const {source,target,items}=_batch;
+  const cats=[...new Set(items.map(i=>i.cat).filter(Boolean))].sort();
+  const restants=items.filter(i=>!i.deja).length;
+  document.getElementById('batch-body').innerHTML=`
+    <h2>♻️ Reconduire vers ${esc(target)}</h2>
+    <div class="msg-info">Les projets cochés seront recopiés dans <strong>${esc(target)}</strong> :
+      contenu repris, <strong>dates vidées</strong>, statut « Planifié ». Les fiches de
+      ${esc(source)} ne sont pas modifiées.</div>
+    <div class="batch-toolbar">
+      <select id="batch-cat" onchange="renderBatchItems()">
+        <option value="">Toutes les catégories</option>
+        ${cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
+      <button class="btn btn-ghost btn-xs" onclick="batchSelectAll(true)">Tout cocher</button>
+      <button class="btn btn-ghost btn-xs" onclick="batchSelectAll(false)">Tout décocher</button>
+      <span class="batch-count" id="batch-count">0 sélectionné</span>
+    </div>
+    <div class="batch-list" id="batch-list"></div>
+    <div class="msg-err" id="batch-err"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.9rem" id="batch-go"
+      onclick="runReconductBatch()">Reconduire la sélection vers ${esc(target)}</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="closeBatch()">Annuler</button>
+    <p style="font-size:.75rem;color:var(--t3);margin-top:.6rem">
+      ${restants} projet(s) reconductible(s) sur ${items.length} — les projets déjà repris sont signalés.</p>`;
+  renderBatchItems();
+}
+
+function renderBatchItems(){
+  const filtre=(document.getElementById('batch-cat')||{}).value||'';
+  const list=document.getElementById('batch-list');
+  const items=_batch.items.filter(i=>!filtre||i.cat===filtre);
+  if(!items.length){ list.innerHTML='<p class="comment-empty">Aucun projet dans cette catégorie.</p>'; batchCount(); return; }
+  list.innerHTML=items.map(i=>`
+    <div class="batch-item ${i.deja?'is-done':''}">
+      <input type="checkbox" class="batch-cb" id="bcb-${esc(i.id)}" value="${esc(i.id)}"
+        ${i.deja?'disabled':''} ${_batch.selected.has(i.id)?'checked':''}
+        onchange="batchToggle('${jsq(i.id)}',this.checked)">
+      <label for="bcb-${esc(i.id)}">${esc(i.nom)}
+        <span class="bi-meta">${esc(i.id)} · ${esc(i.cat)}${i.ref?' · '+esc(i.ref):''}</span>
+      </label>
+      ${i.deja?'<span class="batch-done-tag">déjà repris</span>':''}
+    </div>`).join('');
+  batchCount();
+}
+
+function batchToggle(id,on){
+  if(on) _batch.selected.add(id); else _batch.selected.delete(id);
+  batchCount();
+}
+/* Agit sur les projets actuellement visibles (donc sur le filtre en cours),
+   sans toucher aux sélections faites dans les autres catégories. */
+function batchSelectAll(on){
+  document.querySelectorAll('.batch-cb').forEach(cb=>{
+    if(cb.disabled) return;
+    cb.checked=on;
+    if(on) _batch.selected.add(cb.value); else _batch.selected.delete(cb.value);
+  });
+  batchCount();
+}
+function batchSelectedIds(){ return [..._batch.selected]; }
+function batchCount(){
+  const n=_batch.selected.size;
+  const el=document.getElementById('batch-count');
+  if(el) el.textContent=n+' sélectionné'+(n>1?'s':'');
+}
+
+async function runReconductBatch(){
+  const btn=document.getElementById('batch-go');
+  const err=document.getElementById('batch-err');
+  err.style.display='none';
+  const ids=batchSelectedIds();
+  if(!ids.length){ err.textContent='Cochez au moins un projet.'; err.style.display='block'; return; }
+  const {source,target}=_batch;
+  btn.disabled=true; btn.textContent=`Reconduction de ${ids.length} projet(s)…`;
+  try{
+    const d=await apiPost({action:'reconduct-batch'},{ids, sourceYear:source, targetYear:target});
+    if(d && d.success){
+      renderBatchReport(d);
+    } else {
+      err.textContent=(d&&d.error)?d.error:'La reconduction a échoué.'; err.style.display='block';
+      btn.disabled=false; btn.textContent=`Reconduire la sélection vers ${target}`;
+    }
+  }catch(e){
+    err.textContent='Erreur réseau : aucune reconduction effectuée.'; err.style.display='block';
+    btn.disabled=false; btn.textContent=`Reconduire la sélection vers ${target}`;
+  }
+}
+
+function renderBatchReport(d){
+  const crees=d.crees||[], ignores=d.ignores||[], erreurs=d.erreurs||[];
+  document.getElementById('batch-body').innerHTML=`
+    <h2>✅ Reconduction terminée</h2>
+    <div class="batch-report">
+      <p><span class="ok">${crees.length} projet(s) créé(s)</span> dans ${esc(d.year)}.</p>
+      ${crees.length?`<ul>${crees.slice(0,12).map(c=>`<li>${esc(c.nom)} → <strong>${esc(c.id)}</strong></li>`).join('')}
+        ${crees.length>12?`<li>… et ${crees.length-12} autre(s)</li>`:''}</ul>`:''}
+      ${ignores.length?`<p><span class="warn">${ignores.length} ignoré(s)</span> car déjà reconduit(s).</p>`:''}
+      ${erreurs.length?`<p><span class="err">${erreurs.length} en erreur</span> :</p>
+        <ul>${erreurs.slice(0,8).map(e=>`<li>${esc(e.id)} — ${esc(e.motif)}</li>`).join('')}</ul>`:''}
+      <p style="color:var(--t2)">Les dates n'ont pas été reprises : pensez à les renseigner
+      sur chaque nouvelle fiche.</p>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.6rem"
+      onclick="closeBatch(); switchYear('${jsq(d.year)}')">Voir ${esc(d.year)}</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="closeBatch()">Rester sur ${esc(_batch.source)}</button>`;
+  toast(crees.length+' projet(s) reconduit(s) vers '+d.year,'♻️');
 }
 
 /* ── Lock / Unlock ── */
