@@ -3461,14 +3461,60 @@ function renderInternat(mc){
 }
 
 /* ADMIN */
+/* ── Sauvegarde du classeur ──
+   Le Google Sheet est la base de données : sans copie, une suppression de ligne
+   est définitive. Le serveur duplique le classeur chaque nuit ; ce bloc permet
+   d'en vérifier l'état et de déclencher une sauvegarde avant une opération à
+   risque (reconduction en lot, purge de corbeille). */
+function backupCardHTML(bk){
+  if(!bk||!bk.success){
+    return `<div class="admin-card">
+      <div class="admin-card-hd"><i class="ph ph-floppy-disk" style="margin-right:.3rem"></i> Sauvegarde</div>
+      <div class="msg-info" style="margin:.4rem 0">Fonction indisponible : le backend n'a pas encore été redéployé avec la sauvegarde automatique.</div>
+    </div>`;
+  }
+  const e=bk.etat||{};
+  const actif=!!e.declencheur_actif;
+  return `<div class="admin-card">
+    <div class="admin-card-hd"><i class="ph ph-floppy-disk" style="margin-right:.3rem"></i> Sauvegarde <small>${e.nombre||0} copie(s)</small></div>
+    <div class="row-item">
+      <div class="row-info">
+        <div class="row-name">${actif?'✅ Sauvegarde automatique active':'⚠️ Sauvegarde automatique inactive'}</div>
+        <div class="row-sub">${e.derniere?('Dernière copie : '+esc(e.derniere)):'Aucune copie enregistrée'}${actif?' · chaque nuit, 30 jours conservés':''}</div>
+      </div>
+    </div>
+    ${actif?'':`<div class="msg-info" style="margin:.4rem 0">Exécutez une fois <code>installBackupTrigger()</code> depuis l'éditeur Apps Script pour activer la sauvegarde nocturne et accorder l'accès à Drive.</div>`}
+    <button class="btn btn-add btn-xs" id="btn-backup" style="width:100%;margin-top:.4rem" onclick="doBackupNow()">Sauvegarder maintenant</button>
+  </div>`;
+}
+
+async function doBackupNow(){
+  const btn=document.getElementById('btn-backup');
+  if(btn){ btn.disabled=true; btn.textContent='Sauvegarde en cours…'; }
+  try{
+    const d=await apiPost({action:'backup-now'},{});
+    if(d&&d.success){
+      toast('Sauvegarde effectuée.','💾');
+      renderAdmin(document.getElementById('mc'));
+    } else {
+      toast((d&&d.error)?d.error:'Sauvegarde impossible.','❌');
+      if(btn){ btn.disabled=false; btn.textContent='Sauvegarder maintenant'; }
+    }
+  }catch(e){
+    toast('Erreur réseau : sauvegarde non effectuée.','❌');
+    if(btn){ btn.disabled=false; btn.textContent='Sauvegarder maintenant'; }
+  }
+}
+
 async function renderAdmin(mc){
   if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
   mc.innerHTML=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
   try {
-    const [ud,ed,ld]=await Promise.all([
+    const [ud,ed,ld,bk]=await Promise.all([
       apiPost({action:'list-users'},{}),
       apiPost({action:'list-emails'},{}),
-      apiPost({action:'get-logs'},{})
+      apiPost({action:'get-logs'},{}),
+      apiPost({action:'backup-status'},{}).catch(()=>({success:false}))
     ]);
     const us=ud.success?ud.data||[]:[];
     const em=ed.success?ed.data||[]:[];
@@ -3477,6 +3523,7 @@ async function renderAdmin(mc){
     mc.innerHTML=`
       <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
       <div class="admin-grid">
+        ${backupCardHTML(bk)}
         <div class="admin-card">
           <div class="admin-card-hd"><i class="ph ph-users-three" style="margin-right:.3rem"></i> Utilisateurs <small>${us.length} comptes</small></div>
           ${us.map(u=>{
