@@ -3530,9 +3530,10 @@ async function renderAdmin(mc){
             const isSelf=u.Email===(S.user&&S.user.email);
             const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.Role?'selected':''}>${r==='vie_scolaire'?'vie scolaire':r}</option>`).join('');
             const fl=u.First_Login==='1';
-            return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem">
+            const inactif=String(u.Actif||'')==='0';   // colonne absente ou vide = actif
+            return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem${inactif?';opacity:.55':''}">
               <div class="row-info" style="flex:1;min-width:0">
-                <div class="row-name">${esc(u.Prenom||'')} ${esc(u.Nom||'')} ${fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':''}</div>
+                <div class="row-name">${esc(u.Prenom||'')} ${esc(u.Nom||'')} ${inactif?'<span style="font-size:.6rem;color:#dc2626;font-weight:700;margin-left:.3rem">● désactivé</span>':(fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':'')}</div>
                 <div class="row-sub">${esc(u.Email||'')} ${u.Mdp_Initial?'<span style="font-size:.65rem;color:var(--t3);margin-left:.3rem">mdp : <code style="background:rgba(0,83,163,.06);padding:.1rem .3rem;border-radius:4px;font-family:monospace;color:var(--aefe-blue)">'+esc(u.Mdp_Initial)+'</code></span>':''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
@@ -3541,6 +3542,7 @@ async function renderAdmin(mc){
                   : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${jsq(u.Email)}',this)">${roleOpts}</select>`
                 }
                 ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${jsq(u.Email)}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
+                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .45rem;border-radius:6px;border:1px solid ${inactif?'rgba(22,163,74,.3)':'rgba(234,179,8,.35)'};background:${inactif?'rgba(22,163,74,.10)':'rgba(234,179,8,.12)'};color:${inactif?'#15803d':'#a16207'}" onclick="setUserActive('${jsq(u.Email)}',${inactif?1:0})" title="${inactif?'Réactiver ce compte':'Désactiver ce compte (ses projets sont conservés)'}">${inactif?'Réactiver':'Désactiver'}</button>`:''}
                 ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${jsq(u.Email)}')">✕</button>`:''}
               </div>
             </div>`;
@@ -3638,6 +3640,22 @@ async function addUser(){
     else toast(d.error||'Erreur lors de la création.','❌');
   } finally { clearBusy(); }
 }
+/* Désactiver conserve la ligne et les projets de la personne : seul l'accès est coupé.
+   La suppression (✕) reste possible mais est définitive. */
+async function setUserActive(email,actif){
+  const titre=actif?'Réactiver ce compte':'Désactiver ce compte';
+  const msg=actif
+    ? email+' pourra de nouveau se connecter avec ses identifiants.'
+    : email+' ne pourra plus se connecter ni modifier de projet. Ses projets sont conservés et restent consultables. Réversible à tout moment.';
+  confirm2(titre,msg,async()=>{
+    try {
+      const d=await apiPost({action:'set-user-active'},{email,actif:actif?'1':'0'});
+      if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Fait.',actif?'✅':'⛔'); }
+      else toast(d.error||'Erreur.','❌');
+    } catch(e){ toast('Erreur réseau.','❌'); }
+  },{okLabel:actif?'Réactiver':'Désactiver', okStyle:actif?'primary':'danger'});
+}
+
 async function adminResetPwd(email){
   confirm2('Réinitialiser le mot de passe','Un nouveau mot de passe sera généré et envoyé par email à '+email+'.', async()=>{
     const d=await apiPost({action:'admin-reset-password'},{email});
