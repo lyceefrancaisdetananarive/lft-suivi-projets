@@ -193,6 +193,17 @@ function sanitizeCell(val) {
 // AUTHENTIFICATION PAR MOT DE PASSE (login uniquement)
 // ============================================================
 
+/**
+ * Un compte est actif sauf si sa colonne Actif vaut '0'.
+ * Colonne absente ou cellule vide = actif : retrocompatible avec les lignes creees avant.
+ * Desactiver un compte ne touche pas a ses projets (lignes independantes, liees par Created_By).
+ */
+function isRowActive(row, actifIdx) {
+  if (actifIdx < 0) return true;
+  var v = row[actifIdx];
+  return !(v !== undefined && v !== null && v.toString().trim() === '0');
+}
+
 function authenticate(email, password) {
   if (!email || !password) return null;
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
@@ -205,10 +216,13 @@ function authenticate(email, password) {
   var nomIdx     = headers.indexOf('Nom');
   var prenomIdx  = headers.indexOf('Prenom');
   var firstIdx   = headers.indexOf('First_Login');
+  var actifIdx   = headers.indexOf('Actif');
   var hashed = hashPassword(password);
   for (var i = 1; i < data.length; i++) {
     if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase().trim() === email.toLowerCase().trim()
         && data[i][passIdx] === hashed) {
+      // Bon mot de passe mais compte desactive : on le signale distinctement pour un message clair
+      if (!isRowActive(data[i], actifIdx)) return { _disabled: true, email: data[i][emailIdx].toString() };
       return {
         email:       data[i][emailIdx].toString(),
         role:        data[i][roleIdx] ? data[i][roleIdx].toString() : 'enseignant',
@@ -239,11 +253,18 @@ function authenticateByToken(token) {
   var firstIdx   = headers.indexOf('First_Login');
   var tokenIdx   = headers.indexOf('Session_Token');
   var expiryIdx  = headers.indexOf('Session_Expiry');
+  var actifIdx   = headers.indexOf('Actif');
 
   if (tokenIdx < 0 || expiryIdx < 0) return null;
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][tokenIdx] && data[i][tokenIdx].toString().trim() === token) {
+      // Compte desactive : la session en cours est revoquee immediatement
+      if (!isRowActive(data[i], actifIdx)) {
+        sheet.getRange(i + 1, tokenIdx + 1).setValue('');
+        sheet.getRange(i + 1, expiryIdx + 1).setValue('');
+        return null;
+      }
       var expiry = parseInt(data[i][expiryIdx].toString());
       if (isNaN(expiry) || new Date().getTime() > expiry) {
         // Token expire : on le nettoie
@@ -308,7 +329,8 @@ function getAuthUser(e) {
   var email = (e.parameter.email || '').trim().toLowerCase();
   var password = e.parameter.password || '';
   if (email && password) {
-    return authenticate(email, password);
+    var u = authenticate(email, password);
+    return (u && u._disabled) ? null : u;
   }
   return null;
 }
@@ -474,6 +496,7 @@ function doPost(e) {
       case 'add-email':            return handleAddEmail(e);
       case 'delete-email':         return handleDeleteEmail(e);
       case 'change-role':          return handleChangeRole(e);
+      case 'set-user-active':      return handleSetUserActive(e);
       case 'request-deletion':     return handleRequestDeletion(e);
       // Export + Liste utilisateurs (admin)
       case 'export':               return handleExport(e);
@@ -503,6 +526,11 @@ function handleLogin(e) {
   }
 
   var user = authenticate(email, pwd);
+  if (user && user._disabled) {
+    // Bon mot de passe, compte ferme : message clair, sans compter comme un echec
+    addLog(email, '', 'login_disabled', 'Tentative sur un compte desactive', di);
+    return jsonResponse({ success: false, error: "Ce compte a ete desactive. Contactez l'administrateur si vous pensez qu'il s'agit d'une erreur." });
+  }
   if (!user) {
     cache.put(cKey, (fails + 1).toString(), 900); // 15 min TTL
     addLog(email, '', 'login_fail', 'Identifiants incorrects (' + (fails + 1) + '/5)', di);
@@ -675,9 +703,15 @@ function handleForgotPassword(e) {
   var emailIdx = headers.indexOf('Email');
   var tokenIdx = headers.indexOf('Reset_Token');
   var expiryIdx= headers.indexOf('Reset_Expiry');
+  var actifIdx = headers.indexOf('Actif');
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase().trim() === email) {
+      // Compte desactive : aucun lien envoye, reponse generique (ne pas reveler l'etat du compte)
+      if (!isRowActive(data[i], actifIdx)) {
+        addLog(email, '', 'forgot_password_disabled', 'Demande sur un compte desactive', di);
+        break;
+      }
       var token  = Utilities.getUuid();
       var expiry = new Date().getTime() + 24 * 60 * 60 * 1000;
       sheet.getRange(i + 1, tokenIdx  + 1).setValue(token);
@@ -1229,6 +1263,53 @@ function handleGetLogs(e) {
 // CHANGE ROLE (POST, admin)
 // ============================================================
 
+/**
+ * POST 'set-user-active' (admin) : desactive ou reactive un compte.
+ * Body : { email, actif: '0' | '1' }
+ * Desactiver conserve la ligne (nom, role, historique) et les projets de la personne ;
+ * seul l'acces est coupe : connexion refusee, session revoquee, reinitialisation impossible.
+ */
+function handleSetUserActive(e) {
+  var admin = getAuthUser(e);
+  if (!isAdmin(admin)) return jsonResponse({ success: false, error: 'Admin requis' });
+
+  var body        = JSON.parse(e.postData.contents);
+  var targetEmail = (body.email || '').trim().toLowerCase();
+  var actif       = (body.actif === '1' || body.actif === 1 || body.actif === true) ? '1' : '0';
+  var di          = extractDeviceInfo(e);
+
+  if (!targetEmail) return jsonResponse({ success: false, error: 'Email requis' });
+  if (targetEmail === admin.email.toLowerCase())
+    return jsonResponse({ success: false, error: 'Vous ne pouvez pas desactiver votre propre compte' });
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) return jsonResponse({ success: false, error: 'Onglet introuvable' });
+  var actifIdx  = ensureColumn(sheet, 'Actif');
+  var data      = sheet.getDataRange().getValues();
+  var headers   = data[0];
+  var emailIdx  = headers.indexOf('Email');
+  var tokenIdx  = headers.indexOf('Session_Token');
+  var expiryIdx = headers.indexOf('Session_Expiry');
+  var nomIdx    = headers.indexOf('Nom');
+  var prenomIdx = headers.indexOf('Prenom');
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][emailIdx] && data[i][emailIdx].toString().toLowerCase().trim() === targetEmail) {
+      sheet.getRange(i + 1, actifIdx + 1).setValue(actif);
+      if (actif === '0') {
+        // Revoquer la session en cours : la personne est deconnectee a sa prochaine requete
+        if (tokenIdx  >= 0) sheet.getRange(i + 1, tokenIdx  + 1).setValue('');
+        if (expiryIdx >= 0) sheet.getRange(i + 1, expiryIdx + 1).setValue('');
+      }
+      var qui = (data[i][prenomIdx] || '') + ' ' + (data[i][nomIdx] || '');
+      addLog(admin.email, admin.role, actif === '0' ? 'deactivate_user' : 'reactivate_user',
+             (actif === '0' ? 'Desactivation' : 'Reactivation') + ' : ' + targetEmail + ' (' + qui.trim() + ')', di);
+      return jsonResponse({ success: true, message: (actif === '0' ? 'Compte desactive : ' : 'Compte reactive : ') + targetEmail });
+    }
+  }
+  return jsonResponse({ success: false, error: 'Utilisateur introuvable' });
+}
+
 function handleChangeRole(e) {
   var admin = getAuthUser(e);
   if (!isAdmin(admin)) return jsonResponse({ success: false, error: 'Admin requis' });
@@ -1452,15 +1533,15 @@ function initializeSheets() {
   var u = ss.getSheetByName(USERS_SHEET);
   if (!u) {
     u = ss.insertSheet(USERS_SHEET);
-    u.getRange(1, 1, 1, 11).setValues([['Email','Mot_de_Passe','Role','Nom','Prenom','Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry']]);
-    u.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
+    u.getRange(1, 1, 1, 12).setValues([['Email','Mot_de_Passe','Role','Nom','Prenom','Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry','Actif']]);
+    u.getRange(1, 1, 1, 12).setFontWeight('bold').setBackground('#0053a3').setFontColor('white');
     u.setFrozenRows(1);
     var adminPwd = generatePassword();
     u.appendRow(['admin@egd.mg', hashPassword(adminPwd), 'admin', 'Administrateur', 'LFT', '', '', adminPwd, '1', '', '']);
     Logger.log('Admin cree : admin@egd.mg / ' + adminPwd);
   } else {
     var existingH = u.getRange(1, 1, 1, u.getLastColumn()).getValues()[0];
-    var newCols = ['Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry'];
+    var newCols = ['Reset_Token','Reset_Expiry','Mdp_Initial','First_Login','Session_Token','Session_Expiry','Actif'];
     for (var c = 0; c < newCols.length; c++) {
       if (existingH.indexOf(newCols[c]) < 0) {
         var col = u.getLastColumn() + 1;
