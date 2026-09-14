@@ -30,6 +30,7 @@
 | `index.html` | dépôt GitHub, publié par GitHub Pages | l'application entière : CSS, HTML et JS dans un seul fichier, sans build ni framework |
 | `Code.gs` | projet Apps Script lié au Google Sheet | l'API (routage `doGet` / `doPost`, `Code.gs:434` et suivantes) |
 | Google Sheet | Drive du compte propriétaire | la base de données |
+| `Signature.gs` | projet Apps Script **uniquement** (non versionné dans git) | la bannière de signature de l'administrateur, en base64, jointe aux courriels d'identifiants |
 
 Site en ligne : <https://lyceefrancaisdetananarive.github.io/lft-suivi-projets/>
 
@@ -244,6 +245,42 @@ chaque année. Un lien ne désigne un projet qu'accompagné de son année, via l
 paramètre `?annee=` que l'application ajoute automatiquement lorsqu'on consulte
 une année autre que l'année courante (`index.html:1955`). Un lien vers un projet
 d'archive copié sans ce paramètre ouvrira un projet différent.
+
+### Transmettre les identifiants aux collègues
+
+Les identifiants de rentrée ne s'envoient pas depuis l'application : `Code.gs`
+contient une section **« BROUILLONS GMAIL »** qui dépose, dans la boîte Gmail de
+l'administrateur, **un brouillon par enseignant et par CPE actif** de l'onglet
+`Utilisateurs`. Rien n'est envoyé : chaque brouillon se relit et s'envoie à la
+main depuis Gmail. Trois formulations sont choisies automatiquement — mot de passe
+provisoire jamais changé (redonné tel quel), mot de passe personnalisé
+(« identifiants inchangés »), compte créé à la rentrée (liste
+`BROUILLONS_NOUVEAUX`).
+
+1. Dans `Code.gs`, mettre à jour `BROUILLONS_ANNEE`, `BROUILLONS_ANNEE_PREC` et
+   `BROUILLONS_NOUVEAUX` ; coller le fichier dans l'éditeur (§ 2.1–2.2). Aucun
+   redéploiement n'est nécessaire : ces fonctions se lancent depuis l'éditeur.
+2. Vérifier que le fichier **`Signature.gs`** est présent dans le projet Apps
+   Script (menu Fichiers, à gauche). Il porte la bannière de signature encodée en
+   base64 et n'est **pas** dans le dépôt git : s'il manque, le régénérer depuis
+   `documents/signature_max_rafaliarison.png` (la commande figure en tête du
+   fichier local) et l'ajouter au projet par **Fichiers → + → Script**, nom
+   `Signature`.
+3. Sélectionner `creerBrouillonsIdentifiants` dans la liste des fonctions,
+   **Exécuter**. À la première exécution, Google demande l'autorisation Gmail
+   (« Gérer les brouillons ») : la cocher. La fonction refuse de tourner sous un
+   autre compte que `max.rafaliarison@egd.mg` et ne crée jamais de doublon.
+4. Lire le **Journal d'exécution** : `Brouillons crees : N (A=…, B=…, C=…)`, puis
+   ouvrir Gmail → Brouillons.
+
+Pour retoucher le texte ou la mise en forme après coup : modifier
+`composerCourrielIdentifiants()`, **incrémenter `BROUILLONS_MODELE`** (le nom de
+la bannière jointe porte cette version et sert de marqueur « brouillon à
+jour »), recoller `Code.gs`, puis exécuter `mettreAJourBrouillonsIdentifiants()`
+— elle régénère les brouillons à l'ancienne version sans les renvoyer, saute
+ceux déjà à jour et s'arrête d'elle-même avant la limite de six minutes d'Apps
+Script : la relancer jusqu'à ce que le journal n'indique plus de restants. Sans
+incrément de `BROUILLONS_MODELE`, elle ne refait rien.
 
 ### Reprendre les projets de l'année précédente
 
