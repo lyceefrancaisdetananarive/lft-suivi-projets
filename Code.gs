@@ -2014,3 +2014,216 @@ function handleBackupStatus(e) {
     return jsonResponse({ success: false, error: err.toString() });
   }
 }
+
+// ============================================================
+// BROUILLONS GMAIL — transmission des identifiants (rentree)
+// A executer depuis l'editeur Apps Script, sous le compte de
+// l'administrateur : chaque destinataire recoit un brouillon dans SA boite
+// Gmail (rien n'est envoye).
+//   creerBrouillonsIdentifiants()       : cree les brouillons manquants (sans doublon)
+//   mettreAJourBrouillonsIdentifiants() : regenere le contenu des brouillons existants
+//                                          (apres retouche du texte ou de la mise en forme)
+// ============================================================
+
+var BROUILLONS_ANNEE      = '2026-2027';
+var BROUILLONS_ANNEE_PREC = '2025-2026';
+var BROUILLONS_SUJET   = "Plateforme de suivi des projets d'établissement — vos identifiants " + BROUILLONS_ANNEE;
+var BROUILLONS_BOITE   = 'max.rafaliarison@egd.mg';   // seule boite autorisee a recevoir les brouillons
+var BROUILLONS_SIGNAT  = 'Max William Rafaliarison';
+// Comptes crees a la rentree : ils recoivent la formulation « nouveau compte »
+var BROUILLONS_NOUVEAUX = ["aina.rakotonindrina@egd.mg","alexandra.denage@egd.mg","candy.rakotoary@egd.mg","claire.doz@egd.mg","clarissa.behar@egd.mg","david.arnaud@egd.mg","david.lablanche@egd.mg","elisabeth.gau@egd.mg","faneva.rabehanitriniony@egd.mg","frederic.danchin@egd.mg","gwenaelle.lazou@egd.mg","herve.hourcq@egd.mg","jean.rio@egd.mg","jennifer.razanadrakoto@egd.mg","jerome.lucas@egd.mg","jonathan.ramontarison@egd.mg","jonathan.robert@egd.mg","juana.rakotoson@egd.mg","laetitia.andreu@egd.mg","laingo.nomenjanahary@egd.mg","laurent.gournier@egd.mg","loic.saunders@egd.mg","magali.roux@egd.mg","petrina.dacosta@egd.mg","philippe.vaillant@egd.mg","pierre.brault@egd.mg","remy.eudeline@egd.mg","sandrine.linder@egd.mg","veronique.andriambelo@egd.mg","yasser.ahmed@egd.mg","yves.guillemot@egd.mg"];
+
+function htmlEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/**
+ * Corps du courriel : HTML + version texte.
+ * Charte graphique LFT / AEFE : bleu AEFE #0053a3, magenta AEFE #d40883, gradient
+ * bleu -> magenta (bouton, filet), fonds #f0f4f8. Texte en Garamond, taille grande,
+ * bleu nuit #073763 (demande de l'administrateur). Logo LFT charge depuis GitHub Pages.
+ * Structure : en-tete (logo + titre), salutation, bouton d'acces, encadre identifiants,
+ * premiere connexion (cas A/C) ou mot de passe oublie (cas B), reprise des projets,
+ * disponibilite, signature.
+ */
+var BROUILLONS_LOGO = APP_URL + 'logo-lft.jpg';
+function composerCourrielIdentifiants(d) {
+  var BLEU = '#0053a3', MAG = '#d40883', TXT = '#073763', FOND = '#f0f4f8';
+  var GRAD = 'background-color:' + BLEU + ';background-image:linear-gradient(90deg,' + BLEU + ' 0%,' + MAG + ' 100%);';
+  var FONT = "font-family:Garamond,'EB Garamond',Georgia,'Times New Roman',serif;";
+  var BASE = FONT + 'font-size:large;color:' + TXT + ';line-height:1.35;';
+  var P    = '<p style="margin:0 0 10px">';
+  var TITRE = '<p style="margin:0 0 4px;color:' + BLEU + '"><b>';
+  var h = '<div style="' + BASE + 'max-width:640px">';
+  var t = [];
+
+  // En-tete : logo LFT + nom de l'etablissement, souligne d'un filet bleu -> magenta
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px"><tr>' +
+       '<td width="72" style="padding:0 14px 6px 0;vertical-align:middle">' +
+       '<a href="' + APP_URL + '" style="text-decoration:none"><img src="' + BROUILLONS_LOGO + '" width="64" height="64" alt="LFT" style="display:block;border-radius:50%"></a></td>' +
+       '<td style="padding:0 0 6px;vertical-align:middle;' + BASE + '">' +
+       '<span style="font-size:x-large;font-weight:bold;color:' + BLEU + '">Lycée Français de Tananarive</span><br>' +
+       '<span style="font-size:medium;color:' + MAG + '">Suivi des projets d\'établissement &nbsp;·&nbsp; ' + BROUILLONS_ANNEE + '</span></td>' +
+       '</tr><tr><td colspan="2" style="height:3px;line-height:3px;font-size:3px;' + GRAD + '">&nbsp;</td></tr></table>';
+  t.push("LYCÉE FRANÇAIS DE TANANARIVE · Suivi des projets d'établissement · " + BROUILLONS_ANNEE, '');
+
+  // Salutation + contexte
+  h += P + 'Bonjour ' + htmlEsc(d.prenom) + ',</p>';
+  t.push('Bonjour ' + d.prenom + ',', '');
+  var intro = "La plateforme de suivi des projets d'établissement est ouverte pour l'année scolaire " + BROUILLONS_ANNEE +
+              ". Vous pouvez dès à présent y déclarer vos projets et y reprendre, en quelques clics, ceux de l'année dernière.";
+  h += P + intro + '</p>';
+  t.push(intro, '');
+
+  // Bouton d'acces (tableau : rendu fiable dans Gmail / Outlook), gradient AEFE
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 12px"><tr><td style="border-radius:6px;' + GRAD + '">' +
+       '<a href="' + APP_URL + '" style="' + FONT + 'font-size:large;display:inline-block;padding:8px 22px;color:#ffffff;text-decoration:none;font-weight:bold">Accéder à la plateforme</a>' +
+       '</td></tr></table>';
+  t.push('Plateforme : ' + APP_URL, '');
+
+  // Encadre identifiants (fond gris tres clair, filet magenta)
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px;background-color:' + FOND + ';border-left:4px solid ' + MAG + '"><tr><td style="padding:8px 14px;' + BASE + '">';
+  h += '<b style="color:' + BLEU + '">Identifiant :</b> ' + htmlEsc(d.email) + '<br>';
+  t.push('Identifiant : ' + d.email);
+  if (d.sit === 'B') {
+    h += '<b style="color:' + BLEU + '">Mot de passe :</b> celui que vous avez choisi — vos identifiants restent inchangés.';
+    t.push('Mot de passe : celui que vous avez choisi — vos identifiants restent inchangés.', '');
+  } else {
+    h += '<b style="color:' + BLEU + '">Mot de passe provisoire :</b> <span style="letter-spacing:.06em">' + htmlEsc(d.mdp) + '</span>' +
+         (d.sit === 'A' ? " <i>(inchangé depuis l'année dernière)</i>" : '');
+    t.push('Mot de passe provisoire : ' + d.mdp + (d.sit === 'A' ? " (inchangé depuis l'année dernière)" : ''), '');
+  }
+  h += '</td></tr></table>';
+
+  // Premiere connexion (A/C) ou mot de passe oublie (B)
+  if (d.sit === 'B') {
+    h += P + "En cas d'oubli, le lien « Mot de passe oublié ? » de la page de connexion vous enverra un lien de réinitialisation, valable 24 heures.</p>";
+    t.push("En cas d'oubli, le lien « Mot de passe oublié ? » de la page de connexion vous enverra un lien de réinitialisation, valable 24 heures.", '');
+  } else {
+    h += TITRE + 'Première connexion</b></p>' +
+         '<ol style="margin:0 0 12px;padding-left:24px;' + BASE + '">' +
+         '<li>Cliquez sur « Connexion », en haut à droite.</li>' +
+         '<li>Saisissez votre adresse e-mail et le mot de passe provisoire ci-dessus.</li>' +
+         '<li>Choisissez votre mot de passe personnel : 8 caractères au moins, avec une majuscule, une minuscule et un chiffre.</li>' +
+         '</ol>';
+    t.push('Première connexion :',
+           '1. Cliquez sur « Connexion », en haut à droite.',
+           '2. Saisissez votre adresse e-mail et le mot de passe provisoire ci-dessus.',
+           '3. Choisissez votre mot de passe personnel : 8 caractères au moins, avec une majuscule, une minuscule et un chiffre.', '');
+  }
+
+  // Reprise des projets
+  h += TITRE + "Reprendre un projet de l'année dernière</b></p>" +
+       P + 'Choisissez « ' + BROUILLONS_ANNEE_PREC + " » dans le sélecteur d'année, en haut à droite, puis cliquez sur « Reprendre des projets ». " +
+       "La fiche est recopiée ; il ne vous reste qu'à en actualiser les dates.</p>";
+  t.push("Reprendre un projet de l'année dernière : choisissez « " + BROUILLONS_ANNEE_PREC + " » dans le sélecteur d'année, en haut à droite, " +
+         "puis cliquez sur « Reprendre des projets ». La fiche est recopiée ; il ne vous reste qu'à en actualiser les dates.", '');
+
+  // Disponibilite + signature
+  h += P + "Franck Degueurce et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.</p>";
+  t.push("Franck Degueurce et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.", '');
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:14px 0 0"><tr><td style="height:2px;line-height:2px;font-size:2px;' + GRAD + '">&nbsp;</td></tr></table>' +
+       '<p style="margin:8px 0 0">Bien cordialement,<br><b style="color:' + BLEU + '">' + BROUILLONS_SIGNAT + '</b><br>' +
+       '<span style="font-size:medium">Lycée Français de Tananarive — AEFE</span></p></div>';
+  t.push('Bien cordialement,', BROUILLONS_SIGNAT, 'Lycée Français de Tananarive — AEFE');
+  return { html: h, texte: t.join('\n') };
+}
+
+/** Garde : le script doit tourner sous la boite de l'administrateur. */
+function verifierBoiteBrouillons() {
+  var moi = Session.getEffectiveUser().getEmail().toLowerCase();
+  if (moi !== BROUILLONS_BOITE) {
+    throw new Error('Refus : ce script tourne sous ' + moi + ' et non ' + BROUILLONS_BOITE + '. Les brouillons iraient dans la mauvaise boite.');
+  }
+  return moi;
+}
+
+/** Adresse du destinataire d'un brouillon (« Nom <email> » ou « email »). */
+function emailDestinataireBrouillon(message) {
+  return (message.getTo() || '').toLowerCase().replace(/^.*<|>.*$/g, '').trim();
+}
+
+/**
+ * Destinataires depuis l'onglet Utilisateurs : comptes actifs, roles enseignant
+ * et vie_scolaire. Retourne { parEmail: {email -> d}, sansMdp: [emails] }.
+ *   d = { email, prenom, sit (A/B/C), mdp }
+ */
+function chargerDestinatairesIdentifiants() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  var data  = sheet.getDataRange().getValues();
+  var H     = data[0];
+  var iEmail = H.indexOf('Email'), iRole = H.indexOf('Role'), iPrenom = H.indexOf('Prenom'),
+      iFirst = H.indexOf('First_Login'), iMdp = H.indexOf('Mdp_Initial'), iActif = H.indexOf('Actif');
+  var nouveaux = {};
+  for (var n = 0; n < BROUILLONS_NOUVEAUX.length; n++) nouveaux[BROUILLONS_NOUVEAUX[n]] = true;
+
+  var parEmail = {}, sansMdp = [];
+  for (var i = 1; i < data.length; i++) {
+    var email = (data[i][iEmail] || '').toString().trim().toLowerCase();
+    var role  = (data[i][iRole]  || '').toString();
+    if (!email || email === BROUILLONS_BOITE) continue;
+    if (role !== 'enseignant' && role !== 'vie_scolaire') continue;
+    if (!isRowActive(data[i], iActif)) continue;
+
+    var mdpInit = (data[i][iMdp] || '').toString().trim();
+    var sit = nouveaux[email] ? 'C' : ((data[i][iFirst] || '').toString() === '1' && mdpInit ? 'A' : 'B');
+    if (sit !== 'B' && !mdpInit) { sansMdp.push(email); continue; }   // ne jamais envoyer un mdp vide
+    parEmail[email] = { email: email, prenom: (data[i][iPrenom] || '').toString(), sit: sit, mdp: mdpInit };
+  }
+  return { parEmail: parEmail, sansMdp: sansMdp };
+}
+
+function creerBrouillonsIdentifiants() {
+  var moi = verifierBoiteBrouillons();
+  // Brouillons deja presents avec ce sujet (reexecution sans doublon)
+  var deja = {};
+  var drafts = GmailApp.getDrafts();
+  for (var k = 0; k < drafts.length; k++) {
+    var m = drafts[k].getMessage();
+    if (m.getSubject() === BROUILLONS_SUJET) deja[emailDestinataireBrouillon(m)] = true;
+  }
+
+  var dest = chargerDestinatairesIdentifiants();
+  var crees = 0, ignores = 0, compte = { A: 0, B: 0, C: 0 };
+  var emails = Object.keys(dest.parEmail).sort();
+  for (var i = 0; i < emails.length; i++) {
+    var d = dest.parEmail[emails[i]];
+    if (deja[d.email]) { ignores++; continue; }
+    var c = composerCourrielIdentifiants(d);
+    GmailApp.createDraft(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, name: BROUILLONS_SIGNAT });
+    crees++; compte[d.sit]++;
+  }
+  var bilan = 'Brouillons crees : ' + crees + ' (A=' + compte.A + ', B=' + compte.B + ', C=' + compte.C + ')'
+            + (ignores ? ' | deja presents ignores : ' + ignores : '')
+            + (dest.sansMdp.length ? ' | SANS MOT DE PASSE (non crees) : ' + dest.sansMdp.join(', ') : '');
+  Logger.log(bilan);
+  addLog(moi, 'admin', 'brouillons_identifiants', bilan);
+  return bilan;
+}
+
+/**
+ * Regenere le contenu (HTML + texte) de chaque brouillon deja cree, sans en
+ * changer le destinataire ni le sujet. Rien n'est envoye. A utiliser apres une
+ * retouche de composerCourrielIdentifiants().
+ */
+function mettreAJourBrouillonsIdentifiants() {
+  var moi  = verifierBoiteBrouillons();
+  var dest = chargerDestinatairesIdentifiants();
+  var drafts = GmailApp.getDrafts();
+  var maj = 0, inconnus = [], compte = { A: 0, B: 0, C: 0 };
+  for (var k = 0; k < drafts.length; k++) {
+    var m = drafts[k].getMessage();
+    if (m.getSubject() !== BROUILLONS_SUJET) continue;
+    var email = emailDestinataireBrouillon(m);
+    var d = dest.parEmail[email];
+    if (!d) { inconnus.push(email); continue; }   // compte desactive ou retire entre-temps : brouillon laisse tel quel
+    var c = composerCourrielIdentifiants(d);
+    drafts[k].update(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, name: BROUILLONS_SIGNAT });
+    maj++; compte[d.sit]++;
+  }
+  var bilan = 'Brouillons mis a jour : ' + maj + ' (A=' + compte.A + ', B=' + compte.B + ', C=' + compte.C + ')'
+            + (inconnus.length ? ' | NON MIS A JOUR (destinataire inconnu ou inactif) : ' + inconnus.join(', ') : '');
+  Logger.log(bilan);
+  addLog(moi, 'admin', 'brouillons_identifiants_maj', bilan);
+  return bilan;
+}
