@@ -1731,7 +1731,9 @@ function _devInfo(){
 /* token + année consultée : injectés dans le body de chaque POST (le backend lit body.year) */
 function _auth(){ return {token: localStorage.getItem('lft_t')||'', year: S.year}; }
 async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({...(b||{}),..._auth()}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
+// Le corps explicite prime sur _auth() : sinon le jeton de session (clé « token », vide hors
+// connexion) écrasait le jeton de réinitialisation envoyé par doConfirmReset → « Token manquant ».
+async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth(),...(b||{})}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
 
 async function loadProjects(){
   // Ne jamais conserver la liste de l'année précédente en cas d'échec : on afficherait
