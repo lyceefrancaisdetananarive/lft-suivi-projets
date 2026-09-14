@@ -1730,10 +1730,31 @@ function _devInfo(){
 }
 /* token + année consultée : injectés dans le body de chaque POST (le backend lit body.year) */
 function _auth(){ return {token: localStorage.getItem('lft_t')||'', year: S.year}; }
-async function apiGet(p){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()})); return r.json(); }
+/* Le serveur Apps Script répond parfois, de façon transitoire, par une page HTML
+   « Page introuvable » (404) avant même d'exécuter le script, ou par une coupure réseau.
+   On réessaie alors jusqu'à 2 fois — uniquement pour les actions sans effet de bord
+   (lectures, connexion), afin de ne jamais rejouer une écriture dont la réponse se serait perdue. */
+const API_RETRY_ACTIONS=new Set(['list-users','list-emails','get-logs','backup-status','list-trash','export','login']);
+async function _apiFetch(url,opts,retries){
+  for(let n=0;;n++){
+    try {
+      const r=await fetch(url,opts);
+      const txt=await r.text();
+      try { return JSON.parse(txt); }
+      catch(e){ throw new Error('Réponse non JSON (HTTP '+r.status+')'); }
+    } catch(e){
+      if(n>=retries) throw e;
+      await new Promise(res=>setTimeout(res,1500*(n+1)));
+    }
+  }
+}
+async function apiGet(p){ return _apiFetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),undefined,2); }
 // Le corps explicite prime sur _auth() : sinon le jeton de session (clé « token », vide hors
 // connexion) écrasait le jeton de réinitialisation envoyé par doConfirmReset → « Token manquant ».
-async function apiPost(p,b){ const r=await fetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth(),...(b||{})}),headers:{'Content-Type':'text/plain;charset=utf-8'}}); return r.json(); }
+async function apiPost(p,b){
+  const retries=API_RETRY_ACTIONS.has(p.action)?2:0;
+  return _apiFetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth(),...(b||{})}),headers:{'Content-Type':'text/plain;charset=utf-8'}},retries);
+}
 
 async function loadProjects(){
   // Ne jamais conserver la liste de l'année précédente en cas d'échec : on afficherait
@@ -3512,18 +3533,24 @@ async function renderAdmin(mc){
   if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
   mc.innerHTML=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
   try {
+    // Chaque appel est isolé : un échec (serveur Google lent ou « Page introuvable »
+    // transitoire) ne doit pas masquer les autres cartes. On signale ce qui manque.
+    const KO={success:false,_ko:true};
     const [ud,ed,ld,bk]=await Promise.all([
-      apiPost({action:'list-users'},{}),
-      apiPost({action:'list-emails'},{}),
-      apiPost({action:'get-logs'},{}),
-      apiPost({action:'backup-status'},{}).catch(()=>({success:false}))
+      apiPost({action:'list-users'},{}).catch(()=>KO),
+      apiPost({action:'list-emails'},{}).catch(()=>KO),
+      apiPost({action:'get-logs'},{}).catch(()=>KO),
+      apiPost({action:'backup-status'},{}).catch(()=>KO)
     ]);
+    if(ud._ko&&ed._ko&&ld._ko&&bk._ko) throw new Error('serveur injoignable');
+    const manquant=[ud._ko&&'utilisateurs',ed._ko&&'adresses autorisées',ld._ko&&'journal',bk._ko&&'sauvegardes'].filter(Boolean);
     const us=ud.success?ud.data||[]:[];
     const em=ed.success?ed.data||[]:[];
     const logs=ld.success?ld.data||[]:[];
     const roleTag=(r)=>`<span class="role-tag ${r==='admin'?'rt-admin':r==='direction'?'rt-dir':r==='vie_scolaire'?'rt-vs':'rt-teacher'}">${r==='vie_scolaire'?'vie scolaire':r||'enseignant'}</span>`;
     mc.innerHTML=`
       <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
+      ${manquant.length?`<div class="state-notice"><div class="sn-ico"><i class="ph-bold ph-warning"></i></div><div><strong>Chargement incomplet.</strong> <span>Le serveur n'a pas répondu pour : ${esc(manquant.join(', '))}.</span></div><button class="btn btn-ghost btn-xs" onclick="renderAdmin(document.getElementById('mc'))">Réessayer</button></div>`:''}
       <div class="admin-grid">
         ${backupCardHTML(bk)}
         <div class="admin-card">
@@ -3612,7 +3639,7 @@ async function renderAdmin(mc){
           </div>
         </div>
       </div>`;
-  } catch(e){ mc.innerHTML=`<div class="empty"><span class="empty-icon">⚠️</span><p>Erreur de chargement.</p></div>`; }
+  } catch(e){ mc.innerHTML=`<div class="empty"><span class="empty-icon">⚠️</span><p>Erreur de chargement : le serveur ne répond pas.</p><p style="color:var(--t3);font-size:.9em">Google Apps Script est parfois lent ou renvoie une page d'erreur passagère.</p><button class="btn btn-primary" onclick="renderAdmin(document.getElementById('mc'))">Réessayer</button></div>`; }
 }
 
 async function delUser(email){
