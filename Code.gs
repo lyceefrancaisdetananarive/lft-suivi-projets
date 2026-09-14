@@ -2017,12 +2017,14 @@ function handleBackupStatus(e) {
 
 // ============================================================
 // BROUILLONS GMAIL — transmission des identifiants (rentree)
-// A executer depuis l'editeur Apps Script, sous le compte de
-// l'administrateur : chaque destinataire recoit un brouillon dans SA boite
-// Gmail (rien n'est envoye).
+// A executer depuis l'editeur Apps Script, sous le compte de l'administrateur :
+// les brouillons sont crees dans la boite Gmail de l'administrateur, un par
+// destinataire ; rien ne part tant qu'il ne les envoie pas lui-meme.
 //   creerBrouillonsIdentifiants()       : cree les brouillons manquants (sans doublon)
 //   mettreAJourBrouillonsIdentifiants() : regenere le contenu des brouillons existants
 //                                          (apres retouche du texte ou de la mise en forme)
+// Prerequis : le fichier Signature.gs (banniere de signature en base64) doit etre
+// present dans le projet Apps Script — il n'est pas versionne dans git.
 // ============================================================
 
 var BROUILLONS_ANNEE      = '2026-2027';
@@ -2030,6 +2032,7 @@ var BROUILLONS_ANNEE_PREC = '2025-2026';
 var BROUILLONS_SUJET   = "Plateforme de suivi des projets d'établissement — vos identifiants " + BROUILLONS_ANNEE;
 var BROUILLONS_BOITE   = 'max.rafaliarison@egd.mg';   // seule boite autorisee a recevoir les brouillons
 var BROUILLONS_SIGNAT  = 'Max William Rafaliarison';
+var BROUILLONS_FRANCK  = 'franck.degueurce@egd.mg';   // lien mailto sur son nom dans le courriel
 // Comptes crees a la rentree : ils recoivent la formulation « nouveau compte »
 var BROUILLONS_NOUVEAUX = ["aina.rakotonindrina@egd.mg","alexandra.denage@egd.mg","candy.rakotoary@egd.mg","claire.doz@egd.mg","clarissa.behar@egd.mg","david.arnaud@egd.mg","david.lablanche@egd.mg","elisabeth.gau@egd.mg","faneva.rabehanitriniony@egd.mg","frederic.danchin@egd.mg","gwenaelle.lazou@egd.mg","herve.hourcq@egd.mg","jean.rio@egd.mg","jennifer.razanadrakoto@egd.mg","jerome.lucas@egd.mg","jonathan.ramontarison@egd.mg","jonathan.robert@egd.mg","juana.rakotoson@egd.mg","laetitia.andreu@egd.mg","laingo.nomenjanahary@egd.mg","laurent.gournier@egd.mg","loic.saunders@egd.mg","magali.roux@egd.mg","petrina.dacosta@egd.mg","philippe.vaillant@egd.mg","pierre.brault@egd.mg","remy.eudeline@egd.mg","sandrine.linder@egd.mg","veronique.andriambelo@egd.mg","yasser.ahmed@egd.mg","yves.guillemot@egd.mg"];
 
@@ -2041,12 +2044,21 @@ function htmlEsc(s) {
  * Corps du courriel : HTML + version texte.
  * Charte graphique LFT / AEFE : bleu AEFE #0053a3, magenta AEFE #d40883, gradient
  * bleu -> magenta (bouton, filet), fonds #f0f4f8. Texte en Garamond, taille grande,
- * bleu nuit #073763 (demande de l'administrateur). Logo LFT charge depuis GitHub Pages.
+ * bleu nuit #073763 (demande de l'administrateur). Logo LFT charge depuis GitHub Pages ;
+ * banniere de signature incorporee en image (cid) depuis Signature.gs, fichier local
+ * non versionne qui doit exister dans le projet Apps Script.
  * Structure : en-tete (logo + titre), salutation, bouton d'acces, encadre identifiants,
  * premiere connexion (cas A/C) ou mot de passe oublie (cas B), reprise des projets,
  * disponibilite, signature.
  */
-var BROUILLONS_LOGO = APP_URL + 'logo-lft.jpg';
+var BROUILLONS_LOGO     = APP_URL + 'logo-lft.jpg';
+var BROUILLONS_SIGN_CID = 'signature';   // banniere de signature incorporee (Signature.gs)
+// Version du modele, portee par le nom de la banniere jointe : l'incrementer apres
+// toute retouche du texte ou de la mise en forme, puis lancer
+// mettreAJourBrouillonsIdentifiants() — les brouillons a l'ancienne version sont
+// refaits, ceux deja a jour sont sautes (convergence garantie, meme en plusieurs passes).
+var BROUILLONS_MODELE   = '2026-09-14-3';
+function nomBanniereSignature() { return 'signature-lft-' + BROUILLONS_MODELE + '.png'; }
 function composerCourrielIdentifiants(d) {
   var BLEU = '#0053a3', MAG = '#d40883', TXT = '#073763', FOND = '#f0f4f8';
   var GRAD = 'background-color:' + BLEU + ';background-image:linear-gradient(90deg,' + BLEU + ' 0%,' + MAG + ' 100%);';
@@ -2054,7 +2066,8 @@ function composerCourrielIdentifiants(d) {
   var BASE = FONT + 'font-size:large;color:' + TXT + ';line-height:1.35;';
   var P    = '<p style="margin:0 0 10px">';
   var TITRE = '<p style="margin:0 0 4px;color:' + BLEU + '"><b>';
-  var h = '<div style="' + BASE + 'max-width:640px">';
+  var h = '<!--[if mso]><table role="presentation" width="640" cellpadding="0" cellspacing="0"><tr><td><![endif]-->' +
+          '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px"><tr><td style="' + BASE + '">';
   var t = [];
 
   // En-tete : logo LFT + nom de l'etablissement, souligne d'un filet bleu -> magenta
@@ -2076,8 +2089,8 @@ function composerCourrielIdentifiants(d) {
   t.push(intro, '');
 
   // Bouton d'acces (tableau : rendu fiable dans Gmail / Outlook), gradient AEFE
-  h += '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 12px"><tr><td style="border-radius:6px;' + GRAD + '">' +
-       '<a href="' + APP_URL + '" style="' + FONT + 'font-size:large;display:inline-block;padding:8px 22px;color:#ffffff;text-decoration:none;font-weight:bold">Accéder à la plateforme</a>' +
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 12px"><tr><td style="border-radius:6px;padding:8px 22px;' + GRAD + '">' +
+       '<a href="' + APP_URL + '" style="' + FONT + 'font-size:large;display:inline-block;color:#ffffff;text-decoration:none;font-weight:bold">Accéder à la plateforme</a>' +
        '</td></tr></table>';
   t.push('Plateforme : ' + APP_URL, '');
 
@@ -2097,8 +2110,8 @@ function composerCourrielIdentifiants(d) {
 
   // Premiere connexion (A/C) ou mot de passe oublie (B)
   if (d.sit === 'B') {
-    h += P + "En cas d'oubli, le lien « Mot de passe oublié ? » de la page de connexion vous enverra un lien de réinitialisation, valable 24 heures.</p>";
-    t.push("En cas d'oubli, le lien « Mot de passe oublié ? » de la page de connexion vous enverra un lien de réinitialisation, valable 24 heures.", '');
+    h += P + "Connectez-vous avec le bouton « Connexion », en haut à droite. En cas d'oubli, cliquez sur « Mot de passe oublié ? » dans la fenêtre de connexion : vous recevrez un lien de réinitialisation, valable 24 heures.</p>";
+    t.push("Connectez-vous avec le bouton « Connexion », en haut à droite. En cas d'oubli, cliquez sur « Mot de passe oublié ? » dans la fenêtre de connexion : vous recevrez un lien de réinitialisation, valable 24 heures.", '');
   } else {
     h += TITRE + 'Première connexion</b></p>' +
          '<ol style="margin:0 0 12px;padding-left:24px;' + BASE + '">' +
@@ -2113,20 +2126,32 @@ function composerCourrielIdentifiants(d) {
   }
 
   // Reprise des projets
-  h += TITRE + "Reprendre un projet de l'année dernière</b></p>" +
-       P + 'Choisissez « ' + BROUILLONS_ANNEE_PREC + " » dans le sélecteur d'année, en haut à droite, puis cliquez sur « Reprendre des projets ». " +
-       "La fiche est recopiée ; il ne vous reste qu'à en actualiser les dates.</p>";
-  t.push("Reprendre un projet de l'année dernière : choisissez « " + BROUILLONS_ANNEE_PREC + " » dans le sélecteur d'année, en haut à droite, " +
-         "puis cliquez sur « Reprendre des projets ». La fiche est recopiée ; il ne vous reste qu'à en actualiser les dates.", '');
+  var reprise = 'après connexion, choisissez « ' + BROUILLONS_ANNEE_PREC + " » dans le sélecteur d'année, en haut à droite, cliquez sur « Reprendre des projets », " +
+                'cochez les projets à reprendre, puis validez avec « Reconduire la sélection vers ' + BROUILLONS_ANNEE + ' ». ' +
+                'Les fiches sont recopiées dans ' + BROUILLONS_ANNEE + " ; il ne vous reste qu'à en actualiser les dates.";
+  h += TITRE + "Reprendre vos projets de l'année dernière</b></p>" + P + reprise.charAt(0).toUpperCase() + reprise.slice(1) + '</p>';
+  t.push("Reprendre vos projets de l'année dernière : " + reprise, '');
 
   // Disponibilite + signature
-  h += P + "Franck Degueurce et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.</p>";
-  t.push("Franck Degueurce et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.", '');
-  h += '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:14px 0 0"><tr><td style="height:2px;line-height:2px;font-size:2px;' + GRAD + '">&nbsp;</td></tr></table>' +
-       '<p style="margin:8px 0 0">Bien cordialement,<br><b style="color:' + BLEU + '">' + BROUILLONS_SIGNAT + '</b><br>' +
-       '<span style="font-size:medium">Lycée Français de Tananarive — AEFE</span></p></div>';
-  t.push('Bien cordialement,', BROUILLONS_SIGNAT, 'Lycée Français de Tananarive — AEFE');
-  return { html: h, texte: t.join('\n') };
+  h += P + '<a href="mailto:' + BROUILLONS_FRANCK + '" style="color:' + BLEU + ';font-weight:bold;text-decoration:underline">Franck Degueurce</a>' +
+       " et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.</p>";
+  t.push('Franck Degueurce (' + BROUILLONS_FRANCK + ") et moi-même restons à votre disposition pour toute question ou proposition d'amélioration de notre système.", '');
+  h += '<p style="margin:14px 0 8px">Bien cordialement,</p>' +
+       '<img src="cid:' + BROUILLONS_SIGN_CID + '" width="600" height="120" alt="' + htmlEsc(BROUILLONS_SIGNAT) + ' — Professeur de technologie — Lycée Français de Tananarive" ' +
+       'style="display:block;width:600px;max-width:100%;height:auto;border:0">' +
+       '</td></tr></table><!--[if mso]></td></tr></table><![endif]-->';
+  t.push('Bien cordialement,', BROUILLONS_SIGNAT, 'Professeur de technologie', 'Lycée Français de Tananarive — AEFE',
+         '+261 (0)20 23 425 25 · www.egd.mg · BP 4019 Ambatobe · 101 Antananarivo · Madagascar');
+  var images = {}; images[BROUILLONS_SIGN_CID] = signatureBlob(nomBanniereSignature());
+  return { html: typoFr(h), texte: t.join('\n'), inlineImages: images };
+}
+
+/** Espaces insécables à la française dans le HTML (texte seulement, jamais dans les balises). */
+function typoFr(html) {
+  return html.split(/(<[^>]*>)/).map(function (part, i) {
+    if (i % 2 === 1) return part;   // balise
+    return part.replace(/« /g, '«&nbsp;').replace(/ »/g, '&nbsp;»').replace(/ ([:;?!])/g, '&nbsp;$1');
+  }).join('');
 }
 
 /** Garde : le script doit tourner sous la boite de l'administrateur. */
@@ -2190,7 +2215,7 @@ function creerBrouillonsIdentifiants() {
     var d = dest.parEmail[emails[i]];
     if (deja[d.email]) { ignores++; continue; }
     var c = composerCourrielIdentifiants(d);
-    GmailApp.createDraft(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, name: BROUILLONS_SIGNAT });
+    GmailApp.createDraft(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, inlineImages: c.inlineImages, name: BROUILLONS_SIGNAT });
     crees++; compte[d.sit]++;
   }
   var bilan = 'Brouillons crees : ' + crees + ' (A=' + compte.A + ', B=' + compte.B + ', C=' + compte.C + ')'
@@ -2201,27 +2226,44 @@ function creerBrouillonsIdentifiants() {
   return bilan;
 }
 
+var BROUILLONS_MAJ_TEMPS_MAX_S = 300;   // marge sous la limite de 6 min d'Apps Script : relancer pour finir
+
+/** Vrai si le brouillon porte deja la banniere de signature de la version courante du modele. */
+function brouillonDejaAJour(message) {
+  var pj = message.getAttachments({ includeInlineImages: true, includeAttachments: true });
+  var nom = nomBanniereSignature();
+  for (var i = 0; i < pj.length; i++) if (pj[i].getName() === nom) return true;
+  return false;
+}
+
 /**
- * Regenere le contenu (HTML + texte) de chaque brouillon deja cree, sans en
- * changer le destinataire ni le sujet. Rien n'est envoye. A utiliser apres une
- * retouche de composerCourrielIdentifiants().
+ * Regenere le contenu (HTML + texte + signature incorporee) de chaque brouillon
+ * deja cree, sans en changer le destinataire ni le sujet. Rien n'est envoye.
+ * Les brouillons deja a la version BROUILLONS_MODELE sont sautes ; la fonction
+ * s'arrete avant la limite de temps sans plus appeler Gmail — la relancer
+ * jusqu'a ce que le journal n'indique plus de restants.
  */
 function mettreAJourBrouillonsIdentifiants() {
+  var debut = Date.now();
   var moi  = verifierBoiteBrouillons();
   var dest = chargerDestinatairesIdentifiants();
   var drafts = GmailApp.getDrafts();
-  var maj = 0, inconnus = [], compte = { A: 0, B: 0, C: 0 };
+  var maj = 0, deja = 0, inconnus = [], compte = { A: 0, B: 0, C: 0 }, restants = 0;
   for (var k = 0; k < drafts.length; k++) {
+    if ((Date.now() - debut) / 1000 > BROUILLONS_MAJ_TEMPS_MAX_S) { restants = drafts.length - k; break; }
     var m = drafts[k].getMessage();
     if (m.getSubject() !== BROUILLONS_SUJET) continue;
     var email = emailDestinataireBrouillon(m);
     var d = dest.parEmail[email];
     if (!d) { inconnus.push(email); continue; }   // compte desactive ou retire entre-temps : brouillon laisse tel quel
+    if (brouillonDejaAJour(m)) { deja++; continue; }
     var c = composerCourrielIdentifiants(d);
-    drafts[k].update(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, name: BROUILLONS_SIGNAT });
+    drafts[k].update(d.email, BROUILLONS_SUJET, c.texte, { htmlBody: c.html, inlineImages: c.inlineImages, name: BROUILLONS_SIGNAT });
     maj++; compte[d.sit]++;
   }
-  var bilan = 'Brouillons mis a jour : ' + maj + ' (A=' + compte.A + ', B=' + compte.B + ', C=' + compte.C + ')'
+  var bilan = 'Brouillons mis a jour (modele ' + BROUILLONS_MODELE + ') : ' + maj + ' (A=' + compte.A + ', B=' + compte.B + ', C=' + compte.C + ')'
+            + (deja ? ' | deja a jour (sautes) : ' + deja : '')
+            + (restants ? ' | TEMPS LIMITE ATTEINT, restants (au plus) : ' + restants + ' — relancer la fonction' : '')
             + (inconnus.length ? ' | NON MIS A JOUR (destinataire inconnu ou inactif) : ' + inconnus.join(', ') : '');
   Logger.log(bilan);
   addLog(moi, 'admin', 'brouillons_identifiants_maj', bilan);
