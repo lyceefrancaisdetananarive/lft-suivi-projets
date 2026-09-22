@@ -325,13 +325,10 @@ function getAuthUser(e) {
     var user = authenticateByToken(token);
     if (user) return user;
   }
-  // Fallback email+password (pour change-password premiere connexion)
-  var email = (e.parameter.email || '').trim().toLowerCase();
-  var password = e.parameter.password || '';
-  if (email && password) {
-    var u = authenticate(email, password);
-    return (u && u._disabled) ? null : u;
-  }
+  // Repli email+mot de passe en parametre d'URL : SUPPRIME le 22/09/2026.
+  // Il contournait la limitation a 5 tentatives de handleLogin (qui n'existe que la) et
+  // offrait un oracle de mot de passe illimite et non journalise sur toutes les actions.
+  // La premiere connexion n'en a pas besoin : elle utilise le jeton renvoye par login.
   return null;
 }
 
@@ -578,7 +575,9 @@ function handleRegister(e) {
   var password = generatePassword();
   var sheet    = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
   var hashed   = hashPassword(password);
-  sheet.appendRow([email, hashed, 'enseignant', nom, prenom, '', '', password, '1', '', '']);
+  // sanitizeCell obligatoire : sans lui, un Nom commencant par '=' est ecrit comme FORMULE
+  // par Sheets, relu par authenticate() et renvoye au client (fuite de cellules voisines).
+  sheet.appendRow([email, hashed, 'enseignant', sanitizeCell(nom), sanitizeCell(prenom), '', '', password, '1', '', '']);
   addLog(email, 'enseignant', 'register', 'Nouveau compte: ' + prenom + ' ' + nom, di);
 
   // Creer le token de session immediatement
@@ -2267,5 +2266,79 @@ function mettreAJourBrouillonsIdentifiants() {
             + (inconnus.length ? ' | NON MIS A JOUR (destinataire inconnu ou inactif) : ' + inconnus.join(', ') : '');
   Logger.log(bilan);
   addLog(moi, 'admin', 'brouillons_identifiants_maj', bilan);
+  return bilan;
+}
+
+// ============================================================
+// ROTATION DES IDENTIFIANTS PROVISOIRES COMPROMIS (22/09/2026)
+// ------------------------------------------------------------
+// Le fichier documents/Publipostage_Identifiants_LFT.xlsx (132 lignes : adresse
+// + identifiant provisoire) a ete pousse dans le depot GitHub PUBLIC en mars 2026,
+// puis retire du dernier etat mais pas de l'historique : il restait telechargeable.
+// 103 comptes portaient encore exactement cet identifiant. Cette fonction les
+// invalide tous en une passe.
+//
+// Portee : les comptes First_Login = '1', c'est-a-dire ceux qui ne se sont jamais
+// connectes et utilisent donc encore leur identifiant provisoire. Un compte deja
+// personnalise (First_Login = '0') n'est pas touche : son identifiant n'a jamais
+// figure dans le fichier diffuse.
+//
+// Mode d'emploi :
+//   1. rotationIdentifiantsCompromis(true)   -> simulation, n'ecrit rien
+//   2. rotationIdentifiantsCompromis(false)  -> rotation reelle
+//   3. Rediffuser ensuite les identifiants (brouillons Gmail).
+// La valeur generee n'apparait jamais dans le journal : elle n'est ecrite que dans
+// la colonne Mdp_Initial, exactement comme a la creation d'un compte.
+// ============================================================
+
+/** Valeur forte de 12 caracteres (alphabet sans caracteres ambigus), tiree avec
+ *  Utilities.getUuid() : aleatoire cryptographique, contrairement a Math.random(). */
+function valeurProvisoireForte() {
+  var upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ', lower = 'abcdefghjkmnpqrstuvwxyz', digits = '23456789';
+  var all = upper + lower + digits, hex = '', out = [];
+  while (hex.length < 80) hex += Utilities.getUuid().replace(/-/g, '');
+  function tire(alpha, i) { return alpha.charAt(parseInt(hex.substr(i * 2, 2), 16) % alpha.length); }
+  out.push(tire(upper, 0), tire(lower, 1), tire(digits, 2));
+  for (var i = 3; i < 12; i++) out.push(tire(all, i));
+  for (var j = out.length - 1; j > 0; j--) {          // Fisher-Yates : melange uniforme
+    var k = parseInt(hex.substr(30 + j * 2, 2), 16) % (j + 1), t = out[j]; out[j] = out[k]; out[k] = t;
+  }
+  return out.join('');
+}
+
+function rotationIdentifiantsCompromis(simulation) {
+  var simu = (simulation !== false);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USERS_SHEET);
+  if (!sheet) throw new Error('Onglet ' + USERS_SHEET + ' introuvable.');
+  var data = sheet.getDataRange().getValues(), H = data[0];
+  var iMail  = H.indexOf('Email'), iPass = H.indexOf('Mot_de_Passe'),
+      iInit  = H.indexOf('Mdp_Initial'), iFirst = H.indexOf('First_Login'),
+      iActif = H.indexOf('Actif');
+  if (iMail < 0 || iPass < 0 || iInit < 0 || iFirst < 0) throw new Error('Colonnes attendues absentes.');
+
+  var touches = [], intacts = 0;
+  for (var r = 1; r < data.length; r++) {
+    var email = (data[r][iMail] || '').toString().trim();
+    if (!email) continue;
+    // Un compte peut porter un identifiant provisoire sans que First_Login vaille '1'
+    // (colonne restee vide) : le critere retenu est donc l'un OU l'autre.
+    if (data[r][iFirst].toString().trim() !== '1' && !data[r][iInit].toString().trim()) { intacts++; continue; }
+    if (!simu) {
+      var v = valeurProvisoireForte();
+      sheet.getRange(r + 1, iPass + 1).setValue(hashPassword(v));
+      sheet.getRange(r + 1, iInit + 1).setValue(v);
+      sheet.getRange(r + 1, iFirst + 1).setValue('1');
+    }
+    touches.push(email + (iActif >= 0 && data[r][iActif].toString().trim() === '0' ? ' (desactive)' : ''));
+  }
+
+  var bilan = (simu ? 'SIMULATION - rien n\'a ete ecrit. ' : 'ROTATION EFFECTUEE. ')
+            + touches.length + ' compte(s) concerne(s), ' + intacts + ' compte(s) intact(s) (identifiant deja personnalise).'
+            + (simu ? '\nRelancer avec rotationIdentifiantsCompromis(false) pour appliquer.'
+                    : '\nLes anciens identifiants ne fonctionnent plus : rediffuser les nouveaux avant toute communication.')
+            + '\nComptes : ' + touches.join(', ');
+  if (!simu) addLog(Session.getEffectiveUser().getEmail(), 'admin', 'rotation_identifiants_compromis',
+                    touches.length + ' identifiants provisoires regeneres (fuite dans l\'historique du depot public)');
+  Logger.log(bilan);
   return bilan;
 }

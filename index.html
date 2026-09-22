@@ -1735,18 +1735,36 @@ function _auth(){ return {token: localStorage.getItem('lft_t')||'', year: S.year
    On réessaie alors jusqu'à 2 fois — uniquement pour les actions sans effet de bord
    (lectures, connexion), afin de ne jamais rejouer une écriture dont la réponse se serait perdue. */
 const API_RETRY_ACTIONS=new Set(['list-users','list-emails','get-logs','backup-status','list-trash','export','login']);
+/* Second aléa constaté (22/09/2026) : après un long délai (jusqu'à 60 s), l'infrastructure Google
+   redirige parfois la requête POST et le navigateur la rejoue en GET, sans son corps. Le backend
+   répond alors « Action non reconnue (GET) » : doPost n'a PAS été exécuté (rien d'écrit, personne de
+   connecté), on peut donc rejouer la requête sans risque, même pour une écriture. */
+const API_GET_MARKER='Action non reconnue (GET)';
+const API_GET_RETRIES=2;
 async function _apiFetch(url,opts,retries){
+  const isPost=!!(opts&&opts.method==='POST');
   for(let n=0;;n++){
+    let rejouable=false;
     try {
       const r=await fetch(url,opts);
       const txt=await r.text();
-      try { return JSON.parse(txt); }
+      let d;
+      try { d=JSON.parse(txt); }
       catch(e){ throw new Error('Réponse non JSON (HTTP '+r.status+')'); }
+      if(isPost && d && d.error===API_GET_MARKER){ rejouable=true; throw new Error('Requête rejouée en GET par Google'); }
+      return d;
     } catch(e){
-      if(n>=retries) throw e;
+      if(n>=(rejouable?Math.max(retries,API_GET_RETRIES):retries)) throw e;
       await new Promise(res=>setTimeout(res,1500*(n+1)));
     }
   }
+}
+/* Message lisible pour l'utilisateur selon la nature de l'échec réseau */
+function apiErrText(e,defaut){
+  const m=(e&&e.message)||'';
+  if(/GET/.test(m)) return 'Le service Google a rejoué la demande sans son contenu (délai dépassé). Réessayez dans un instant.';
+  if(/non JSON/.test(m)) return 'Le service Google Apps Script est momentanément indisponible (page introuvable). Réessayez dans un instant.';
+  return defaut||'Erreur réseau. Vérifiez votre connexion.';
 }
 async function apiGet(p){ return _apiFetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),undefined,2); }
 // Le corps explicite prime sur _auth() : sinon le jeton de session (clé « token », vide hors
@@ -2156,7 +2174,7 @@ async function doLogin(){
         closeAuth(); updateHeader(); toast('Bienvenue '+(d.user.prenom||''),'👋'); renderCurrent();
       }
     } else { err.textContent=d.error||'Identifiants incorrects.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau. Vérifiez l\'URL de l\'API.'; err.style.display='block'; }
+  } catch(e){ err.textContent=apiErrText(e); err.style.display='block'; }
   finally { clearBusy(); }
 }
 
@@ -2439,7 +2457,7 @@ function renderCatPage(cat){
   const info=CATS[cat]||{emoji:'📋'};
   mc.innerHTML=`
     <div class="sec-hd">
-      <div class="sec-title"><i class="ph-bold ${info.icon}" style="vertical-align:middle;margin-right:.3rem"></i> ${cat}</div>
+      <div class="sec-title"><i class="ph-bold ${info.icon}" style="vertical-align:middle;margin-right:.3rem"></i> ${esc(cat)}</div>
       <div class="sec-actions">
         ${canAdd()?`<button class="btn btn-add" onclick="openAddForm()">+ Ajouter</button>`:''}
         <button class="btn btn-back" onclick="showDashboard()">← Accueil</button>
