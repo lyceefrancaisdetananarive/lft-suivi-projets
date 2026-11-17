@@ -13,10 +13,14 @@ documents/
 # Fichiers sensibles
 *.json
 .env
+.env*
 
 # Claude
 .claude/
 Signature.gs
+
+# Liaison locale au projet Vercel (et jeton OIDC de .env.local)
+.vercel/
 
 # Exceptions : configuration du déploiement Vercel (aucun secret)
 !package.json

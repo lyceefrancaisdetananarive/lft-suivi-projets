@@ -1,0 +1,11 @@
+# Liste blanche : tout est exclu du déploiement Vercel, sauf ce que la page
+# et les fonctions utilisent. Un fichier ajouté au dépôt ne part donc jamais
+# en ligne par accident (documents/, Code.gs, db/, outils/, PDF...).
+/*
+!/index.html
+!/logo-lft.jpg
+!/logo_aefe_egd.png
+!/fonts
+!/api
+!/package.json
+!/vercel.json
