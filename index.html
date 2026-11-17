@@ -1505,7 +1505,8 @@ footer a:hover { color:var(--aefe-magenta); }
 /* ═══════════════════════════════════════════════════════════
    CONFIG
 ═══════════════════════════════════════════════════════════ */
-const API_URL = 'https://script.google.com/macros/s/AKfycbz23u7EaJP6ZczIqiwITDGb0FgpOp6cMGGEK293k7NS0xqyU7o5r_UUwnNMcBS0ruDkJQ/exec';
+/* Les données passent par les fonctions /api/ du même site (Vercel), qui seules
+   parlent à la base Supabase. La page ne détient ni clé ni jeton. */
 
 /* ── Année scolaire — bascule automatique le 4 juillet ──
    Une année est notée "2025-2026". Avant le 4/7 → (y-1)-y ; à partir du 4/7 00h00 → y-(y+1). */
@@ -1531,7 +1532,12 @@ const CATS = {
   'Projet AEFE':           {icon:'ph-globe-hemisphere-west', cb:'cb-aefe', tc:'tc-aefe', ring:'.22rem solid var(--cat-aefe)'},
   'Projet institutionnel': {icon:'ph-bank',        cb:'cb-inst', tc:'tc-inst', ring:'.22rem solid var(--cat-inst)'},
   'Clubs et activités':    {icon:'ph-trophy',      cb:'cb-clubs', tc:'tc-clubs', ring:'.22rem solid var(--cat-clubs)'},
+  "Projets de l'Internat": {icon:'ph-house-line',  cb:'cb-clubs', tc:'tc-clubs', ring:'.22rem solid var(--cat-clubs)'},
 };
+/* Codes de catégorie de la base ↔ libellés affichés */
+const CODES_CAT = {LFT:'Projet LFT', ZOI:'Projet Zone OI', AEFE:'Projet AEFE', INST:'Projet institutionnel',
+  CLUB:'Clubs et activités', INT:"Projets de l'Internat"};
+const CAT_CODE = Object.fromEntries(Object.entries(CODES_CAT).map(([k,l])=>[l,k]));
 
 const AXES = [
   {n:1, t:"Favoriser la réussite scolaire de tous les élèves selon les programmes français et encourager l'ouverture sur le pays d'accueil",
@@ -1642,53 +1648,68 @@ function canReconduct(){
   return S.user.role==='admin'||S.user.role==='direction';
 }
 
+/* ── Session ──
+   Elle vit dans un cookie scellé et HttpOnly posé par le serveur : la page ne voit jamais
+   de jeton. Le cookie témoin « suivi_ouvert » (rôle.échéance), lisible, dit seulement
+   qu'une session est ouverte : l'en-tête s'affiche sans attendre le réseau. Le nom et le
+   rôle affichés sont gardés sur l'appareil ; le serveur, lui, relit le compte à chaque appel. */
+const CLE_U='pp_u', CLE_LISTE='pp_liste_', CLE_ANNEES='pp_annees';
+function temoinSession(){
+  const m=document.cookie.match(/(?:^|;\s*)suivi_ouvert=([a-z_]+)\.(\d+)/);
+  if(!m || Date.now()/1000 > Number(m[2])) return null;
+  return {role:m[1], jusqua:Number(m[2])};
+}
 function loadSession(){
+  const t=temoinSession();
+  if(!t){ clearSession(); return; }
   try {
-    const exp=localStorage.getItem('lft_session_exp');
-    if(exp && Date.now() > parseInt(exp)){ clearSession(); return; }
-    const u=localStorage.getItem('lft_u');
-    if(u) S.user=JSON.parse(u);
+    const u=JSON.parse(localStorage.getItem(CLE_U)||'null');
+    if(u && u.role===t.role) S.user=u;
   }catch(e){}
 }
-function saveSession(u, token){
-  localStorage.setItem('lft_u',JSON.stringify(u));
-  localStorage.setItem('lft_session_exp', Date.now() + 8*60*60*1000); // 8h
-  if(token) localStorage.setItem('lft_t', token);
+function saveSession(u){
+  S.user={email:u.email||'', prenom:u.prenom||'', nom:u.nom||'', role:u.role};
+  try { localStorage.setItem(CLE_U, JSON.stringify(S.user)); }catch(e){}
 }
 function clearSession(){
-  localStorage.removeItem('lft_u'); localStorage.removeItem('lft_e');
-  localStorage.removeItem('lft_p'); localStorage.removeItem('lft_t');
-  localStorage.removeItem('lft_session_exp');
   S.user=null;
+  try {
+    localStorage.removeItem(CLE_U);
+    // Clés de l'ancienne plateforme (Apps Script), dont son jeton de session
+    ['lft_u','lft_e','lft_p','lft_t','lft_session_exp'].forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
 }
 function checkSessionExpiry(){
-  const exp=localStorage.getItem('lft_session_exp');
-  if(S.user && exp && Date.now() > parseInt(exp)){
-    clearSession(); updateHeader(); toast('Session expirée – veuillez vous reconnecter.','⏰');
+  if(S.user && !temoinSession()){
+    clearSession(); updateHeader(); toast('Session expirée : veuillez vous reconnecter.','⏰');
+    actualiser(true);
   }
+}
+
+/* ── Listes gardées sur l'appareil ──
+   La dernière liste reçue pour chaque année est conservée : à l'ouverture, la page
+   l'affiche aussitôt, puis la remplace par la liste fraîche dès qu'elle arrive. Si le
+   réseau du lycée coupe, la page reste consultable. Données publiques uniquement. */
+function lireCache(cle){ try { return JSON.parse(localStorage.getItem(cle)||'null'); }catch(e){ return null; } }
+function ecrireCache(cle,val){ try { localStorage.setItem(cle, JSON.stringify(val)); }catch(e){} }
+function viderCachesListes(){
+  try { Object.keys(localStorage).filter(k=>k.startsWith(CLE_LISTE)).forEach(k=>localStorage.removeItem(k)); }catch(e){}
 }
 
 /* ═══════════════════════════════════════════════════════════
    PERMISSIONS
+   Le serveur calcule les droits et les joint à chaque fiche (peut_modifier) : la page
+   ne fait que les afficher. Il les revérifie de toute façon à chaque écriture.
 ═══════════════════════════════════════════════════════════ */
-const VS_CATS=['Clubs et activités','Projets de l\'Internat'];
-function isVS(){ return S.user && S.user.role==='vie_scolaire'; }
-/* Création possible : connecté ET (année non archivée OU admin). */
-function canAdd(){ return !!S.user && canWriteYear(); }
-/* Vérifie si l'utilisateur connecté est listé dans Enseignant_Referent */
-function isReferent(p){
-  if(!S.user||!p.Enseignant_Referent) return false;
-  const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
-  const ref=norm(p.Enseignant_Referent);
-  const nom=norm(S.user.nom);
-  if(!nom||nom.length<2) return false;
-  const nomMatch=ref.includes(nom)||nom.split(/[-\s]/).filter(x=>x.length>=3).some(x=>ref.includes(x));
-  if(!nomMatch) return false;
-  const prenom=norm(S.user.prenom);
-  return !prenom||prenom.length<2||ref.includes(prenom);
+function estDirection(){ return !!S.user && (S.user.role==='admin'||S.user.role==='direction'); }
+/* Création : catégories ouvertes à cette personne cette année (fournies par le serveur) ;
+   l'année en préparation est réservée à la direction. */
+function canAdd(){
+  if(!S.user || !canWriteYear() || !(S.catsAutorisees||[]).length) return false;
+  return S.year<=S.currentYear || estDirection();
 }
-function canEdit(p){ return S.user && canWriteYear() && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||S.user.email===p.Created_By||isReferent(p)); }
-function canDelete(p){ return S.user && canWriteYear() && (S.user.role==='admin'||S.user.role==='direction'||(S.user.role==='vie_scolaire'&&VS_CATS.includes(p.Categorie))||(S.user.email===p.Created_By||isReferent(p))); }
+function canEdit(p){ return !!S.user && !!p._peut_modifier; }
+function canDelete(p){ return canEdit(p); }
 function canRequestDeletion(){ return S.user && (S.user.role==='enseignant'||S.user.role==='vie_scolaire'); }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1709,92 +1730,160 @@ function clearBusy(){
 /* ═══════════════════════════════════════════════════════════
    API
 ═══════════════════════════════════════════════════════════ */
-/* Device info — RGPD : timezone uniquement, pas de geolocalisation IP */
-function _devInfo(){
-  const ua=navigator.userAgent;
-  let os='Inconnu',nav='Inconnu',app='PC';
-  if(ua.includes('Windows'))os='Windows'; else if(ua.includes('Mac OS'))os='macOS';
-  else if(ua.includes('CrOS'))os='ChromeOS'; else if(ua.includes('Linux'))os='Linux';
-  else if(ua.includes('Android')){os='Android';app='Mobile';} else if(ua.includes('iPhone')){os='iOS';app='Mobile';}
-  else if(ua.includes('iPad')){os='iPadOS';app='Tablette';}
-  if(ua.includes('Firefox/'))nav='Firefox'; else if(ua.includes('Edg/'))nav='Edge';
-  else if(ua.includes('Chrome/')&&!ua.includes('Edg/'))nav='Chrome';
-  else if(ua.includes('Safari/')&&!ua.includes('Chrome'))nav='Safari';
-  const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
-  const tzMap={'Indian/Antananarivo':['Madagascar','Antananarivo'],'Europe/Paris':['France','Paris'],
-    'Indian/Reunion':['La Réunion','Saint-Denis'],'Indian/Mayotte':['Mayotte','Mamoudzou'],
-    'Indian/Comoro':['Comores','Moroni'],'Africa/Nairobi':['Kenya','Nairobi'],
-    'Asia/Ho_Chi_Minh':['Vietnam','Ho Chi Minh'],'America/New_York':['États-Unis','New York']};
-  const loc=tzMap[tz]||[tz.split('/')[0]||'',tz.split('/')[1]||''];
-  return {d_pays:loc[0],d_ville:loc[1],d_os:os,d_nav:nav,d_app:app};
+/* Les fonctions /api/ sont servies par le même site : le cookie de session part d'office,
+   la page n'envoie ni clé ni jeton. Le serveur déduit lui-même le navigateur et le
+   système du journal. */
+class ErreurApi extends Error {
+  constructor(message, statut, donnees){ super(message); this.statut=statut; this.donnees=donnees||{}; }
 }
-/* token + année consultée : injectés dans le body de chaque POST (le backend lit body.year) */
-function _auth(){ return {token: localStorage.getItem('lft_t')||'', year: S.year}; }
-/* Le serveur Apps Script répond parfois, de façon transitoire, par une page HTML
-   « Page introuvable » (404) avant même d'exécuter le script, ou par une coupure réseau.
-   On réessaie alors jusqu'à 2 fois — uniquement pour les actions sans effet de bord
-   (lectures, connexion), afin de ne jamais rejouer une écriture dont la réponse se serait perdue. */
-const API_RETRY_ACTIONS=new Set(['list-users','list-emails','get-logs','backup-status','list-trash','export','login']);
-/* Second aléa constaté (22/09/2026) : après un long délai (jusqu'à 60 s), l'infrastructure Google
-   redirige parfois la requête POST et le navigateur la rejoue en GET, sans son corps. Le backend
-   répond alors « Action non reconnue (GET) » : doPost n'a PAS été exécuté (rien d'écrit, personne de
-   connecté), on peut donc rejouer la requête sans risque, même pour une écriture. */
-const API_GET_MARKER='Action non reconnue (GET)';
-const API_GET_RETRIES=2;
-async function _apiFetch(url,opts,retries){
-  const isPost=!!(opts&&opts.method==='POST');
-  for(let n=0;;n++){
-    let rejouable=false;
-    try {
-      const r=await fetch(url,opts);
-      const txt=await r.text();
-      let d;
-      try { d=JSON.parse(txt); }
-      catch(e){ throw new Error('Réponse non JSON (HTTP '+r.status+')'); }
-      if(isPost && d && d.error===API_GET_MARKER){ rejouable=true; throw new Error('Requête rejouée en GET par Google'); }
-      return d;
-    } catch(e){
-      if(n>=(rejouable?Math.max(retries,API_GET_RETRIES):retries)) throw e;
-      await new Promise(res=>setTimeout(res,1500*(n+1)));
+function messageStatut(s){
+  if(s===429) return 'Trop de demandes : patientez un instant, puis réessayez.';
+  if(s>=500) return 'Le service est momentanément indisponible. Réessayez dans un instant.';
+  return "La demande n'a pas abouti.";
+}
+async function api(chemin, {methode='GET', corps, query}={}){
+  const url='/api/'+chemin+(query?'?'+new URLSearchParams(query):'');
+  const opts={method:methode, credentials:'same-origin', cache:'no-store', headers:{accept:'application/json'}};
+  if(corps!==undefined){ opts.headers['content-type']='application/json'; opts.body=JSON.stringify(corps); }
+  // Une lecture coupée par le réseau est rejouée une fois. Une écriture jamais : sa
+  // réponse a pu se perdre APRÈS l'enregistrement, la rejouer créerait un doublon.
+  const essais = methode==='GET' ? 2 : 1;
+  let r;
+  for(let n=1;;n++){
+    try { r=await fetch(url,opts); break; }
+    catch(e){
+      if(n>=essais) throw new ErreurApi('Connexion impossible. Vérifiez le réseau, puis réessayez.',0);
+      await new Promise(ok=>setTimeout(ok,800));
     }
   }
+  let d=null;
+  try { d=await r.json(); }catch(e){}
+  if(!r.ok || !d || d.ok===false){
+    const message=(d&&d.message)||messageStatut(r.status);
+    // Session échue côté serveur : la page l'oublie aussi.
+    if(r.status===401 && S.user && /^(Session expirée|Aucune session)/.test(message)){ clearSession(); updateHeader(); }
+    throw new ErreurApi(message, r.status, d);
+  }
+  return d;
 }
-/* Message lisible pour l'utilisateur selon la nature de l'échec réseau */
-function apiErrText(e,defaut){
-  const m=(e&&e.message)||'';
-  if(/GET/.test(m)) return 'Le service Google a rejoué la demande sans son contenu (délai dépassé). Réessayez dans un instant.';
-  if(/non JSON/.test(m)) return 'Le service Google Apps Script est momentanément indisponible (page introuvable). Réessayez dans un instant.';
-  return defaut||'Erreur réseau. Vérifiez votre connexion.';
+function apiErrText(e,defaut){ return (e&&e.message)||defaut||'Erreur réseau. Vérifiez votre connexion.'; }
+
+/* ── Conversion des fiches ──
+   La page garde ses noms de champs historiques (ceux du classeur Google) ; la base
+   parle en minuscules. Les champs « _ » sont propres à la nouvelle API. */
+const PRIO_L={haute:'Haute', moyenne:'Moyenne', basse:'Basse'};
+function depuisApi(p){
+  return {
+    _id:p.id, _annee:p.annee, _modifie_le:p.modifie_le||null, _peut_modifier:!!p.peut_modifier,
+    ID_Projet:p.code||'', Categorie:CODES_CAT[p.categorie]||p.categorie_libelle||p.categorie||'',
+    Nom_Projet:p.nom||'', Echelle:p.echelle||'', Axe_Projet_Etablissement:p.axe?'Axe '+p.axe:'',
+    Sous_Axe:p.sous_axe||'', Disciplines_Mobilisees:p.disciplines||'', Niveaux_Concernes:p.niveaux||'',
+    Description:p.description||'', Objectifs_Pedagogiques:p.objectifs||'', Priorite:PRIO_L[p.priorite]||'',
+    Date_Debut:p.date_debut||'', Date_Fin:p.date_fin||'', Partenariats:p.partenariats||'',
+    Ressources_Necessaires:p.ressources||'', Modalite_Valorisation:p.valorisation||'',
+    Enseignant_Referent:p.referents||'', Created_By:p.cree_par_nom||'',
+    Locked:p.verrouille?'1':'', Last_Modified_Date:p.modifie_le||'',
+    Reconduit_De:p.reconduit_de||null,
+    Deleted_By:p.supprime_par_nom||'', Deleted_Date:p.supprime_le||'',
+  };
 }
-async function apiGet(p){ return _apiFetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),undefined,2); }
-// Le corps explicite prime sur _auth() : sinon le jeton de session (clé « token », vide hors
-// connexion) écrasait le jeton de réinitialisation envoyé par doConfirmReset → « Token manquant ».
-async function apiPost(p,b){
-  const retries=API_RETRY_ACTIONS.has(p.action)?2:0;
-  return _apiFetch(API_URL+'?'+new URLSearchParams({...p,..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth(),...(b||{})}),headers:{'Content-Type':'text/plain;charset=utf-8'}},retries);
+function versApi(fd){
+  const ax=(String(fd.Axe_Projet_Etablissement||'').match(/[123]/)||[])[0];
+  return {
+    categorie:CAT_CODE[fd.Categorie]||fd.Categorie, priorite:(fd.Priorite||'').toLowerCase()||null,
+    nom:fd.Nom_Projet, description:fd.Description, axe:ax?Number(ax):null, sous_axe:fd.Sous_Axe,
+    date_debut:fd.Date_Debut||null, date_fin:fd.Date_Fin||null, referents:fd.Enseignant_Referent,
+    disciplines:fd.Disciplines_Mobilisees, niveaux:fd.Niveaux_Concernes, echelle:fd.Echelle,
+    partenariats:fd.Partenariats, objectifs:fd.Objectifs_Pedagogiques,
+    ressources:fd.Ressources_Necessaires, valorisation:fd.Modalite_Valorisation,
+  };
 }
 
+/* ── Chargement ── */
+let _signature='';      // empreinte de la liste affichée : on ne redessine que si elle change
+let _dernierChargement=0;
+function appliquerListe(d){
+  S.projects=(d.projets||[]).map(depuisApi);
+  S.catsAutorisees=(d.categories_autorisees||[]).map(c=>CODES_CAT[c]).filter(Boolean);
+  _signature=JSON.stringify([d.projets||[], d.categories_autorisees||[]]);
+}
+/* Ne jamais afficher la liste d'une année sous le millésime d'une autre : si l'année
+   consultée a changé pendant le chargement, la réponse est ignorée. */
 async function loadProjects(){
-  // Ne jamais conserver la liste de l'année précédente en cas d'échec : on afficherait
-  // les projets d'une année sous le millésime d'une autre. S.loadError permet de
-  // distinguer « année vide » et « chargement impossible ».
+  const annee=S.year;
   try {
-    const d=await apiGet({action:'list',table:'Projets',year:S.year});
-    if(d && d.success){ S.projects=d.data||[]; S.loadError=false; }
+    const d=await api('projets/liste',{query:{annee}});
+    if(annee!==S.year) return;
+    appliquerListe(d); S.loadError=false; S.horsLigne=false; _dernierChargement=Date.now();
+    ecrireCache(CLE_LISTE+annee,{projets:d.projets, categories_autorisees:d.categories_autorisees||[]});
+  } catch(e){
+    if(annee!==S.year) return;
+    const c=lireCache(CLE_LISTE+annee);
+    if(c && Array.isArray(c.projets)){ appliquerListe(c); S.loadError=false; S.horsLigne=true; }
     else { S.projects=[]; S.loadError=true; }
-  } catch(e){ S.projects=[]; S.loadError=true; }
+  }
 }
-
-/* Liste des années scolaires disponibles (alimente le sélecteur du nav). */
+/* Années disponibles (alimente le sélecteur du nav). L'année courante vient du serveur. */
+function appliquerAnnees(d){
+  if(!d) return;
+  S.currentYear = d.courante || S.currentYear || currentSchoolYear();
+  S.years = (d.annees && d.annees.length) ? d.annees.slice() : [S.currentYear];
+  if(S.years.indexOf(S.currentYear)<0){ S.years.push(S.currentYear); S.years.sort(); }
+}
 async function loadYears(){
   try {
-    const d=await apiGet({action:'list-years'});
-    if(d.success){
-      S.currentYear = d.current || currentSchoolYear();
-      S.years = (d.years && d.years.length) ? d.years : [S.currentYear];
-      if(S.years.indexOf(S.currentYear)<0){ S.years.push(S.currentYear); S.years.sort(); }
+    const d=await api('projets/annees');
+    appliquerAnnees(d); ecrireCache(CLE_ANNEES,{annees:d.annees, courante:d.courante});
+  } catch(e){ if(!S.years||!S.years.length) S.years=[S.currentYear]; }
+}
+/* Qui est connecté ? Relu en base : un compte désactivé perd la main ici. */
+async function chargerMoi(){
+  try {
+    const d=await api('auth/moi');
+    if(d.connecte) saveSession(d); else if(S.user) clearSession();
+  } catch(e){ /* réseau coupé : on garde l'état connu */ }
+}
+/* Recharge la liste (et la corbeille) en arrière-plan ; ne redessine que si elle a changé,
+   pour ne pas faire perdre sa place ou sa saisie à la personne. `force` : redessiner. */
+async function actualiser(force){
+  const avant=_signature;
+  await Promise.all([loadProjects(), loadTrashCount()]);
+  if(force || _signature!==avant) rafraichirVue();
+}
+/* Redessine la page en cours avec les données fraîches, sans toucher à l'historique. */
+function rafraichirVue(){
+  const mc=document.getElementById('mc');
+  switch(S.page){
+    case 'dashboard': renderDashboard(); break;
+    case 'category':  renderCatPage(S.filter); break;
+    case 'filtered':  renderFilteredPage(S.filter); break;
+    case 'detail': {
+      const p=S.sel && S.projects.find(x=>x._id===S.sel._id);
+      if(!p){ showDashboard(); return; }
+      S.sel=p; renderDetail(p); break;
     }
-  } catch(e){ S.years=[S.currentYear]; }
+    case 'chronologie': renderChronologie(mc); break;
+    case 'etab':        renderEtab(mc); break;
+    case 'clubs':       renderClubs(mc); break;
+    case 'internat':    renderInternat(mc); break;
+    default: break;     // administration, corbeille, aide : indépendantes de la liste
+  }
+  updateArchiveBar();
+}
+/* Retour sur l'onglet après une absence : liste rafraîchie discrètement. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && _dernierChargement && Date.now()-_dernierChargement>3*60*1000){
+    checkSessionExpiry(); actualiser(false);
+  }
+});
+
+/* Date et heure de Tananarive, pour le journal, les commentaires et la corbeille */
+function fmtDateHeure(iso){
+  if(!iso) return '';
+  const d=new Date(iso);
+  if(isNaN(d)) return String(iso);
+  return d.toLocaleString('fr-FR',{timeZone:'Indian/Antananarivo', day:'numeric', month:'short',
+    year:'numeric', hour:'2-digit', minute:'2-digit'});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1847,10 +1936,14 @@ async function switchYear(year){
   S.year=year;
   S.months=schoolMonthsFor(year);
   renderYearSelector();
-  document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement ${esc(year)}…</div>`;
-  await loadProjects();
-  await loadTrashCount();
-  showDashboard();
+  // Année déjà vue sur cet appareil : affichage immédiat, puis mise à jour.
+  const c=lireCache(CLE_LISTE+year);
+  if(c && Array.isArray(c.projets)){ appliquerListe(c); S.loadError=false; S.horsLigne=false; showDashboard(); }
+  else document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement ${esc(year)}…</div>`;
+  const avant=_signature;
+  await Promise.all([loadProjects(), loadTrashCount()]);
+  if(S.year!==year) return;
+  if(!c) showDashboard(); else if(_signature!==avant) rafraichirVue();
   const k=yearKind(year);
   toast('Année scolaire '+year+(k.tag==='arc'?' — archive (lecture seule)':(k.tag==='fut'?' — préparation':'')), k.tag==='arc'?'🗄️':'📅');
 }
@@ -1874,6 +1967,13 @@ function stateNoticeHTML(){
       <span>Vérifiez votre connexion, puis rechargez la page. Les données ne sont pas perdues.</span></div>
       <button class="btn btn-ghost btn-xs" onclick="location.reload()">Recharger</button></div>`;
   }
+  // 1 bis. Réseau coupé : on montre la dernière liste connue, en le disant
+  const horsLigne = S.horsLigne ? `<div class="state-notice">
+      <div class="sn-ico"><i class="ph-bold ph-wifi-slash"></i></div>
+      <div><strong>Connexion au serveur impossible.</strong>
+      <span>Vous consultez la dernière liste enregistrée sur cet appareil ; elle peut avoir changé depuis.</span></div>
+      <button class="btn btn-ghost btn-xs" onclick="actualiser(true)">Réessayer</button></div>` : '';
+  if(horsLigne) return horsLigne;
   const anterieures=(S.years||[]).filter(y=>y<S.year).sort().reverse();
   const precedente=anterieures[0]||null;
   // 2. Année réellement vide
@@ -1972,17 +2072,23 @@ function updateHeader(){
     if(delBtn) delBtn.style.display='none';
   }
 }
-function doLogout(){ clearSession(); updateHeader(); showDashboard(); toast('Déconnecté','👋'); }
+async function doLogout(){
+  // Le serveur efface d'abord le cookie, sinon la liste rechargée porterait encore les droits.
+  try { await api('auth/deconnexion',{methode:'POST'}); }catch(e){}
+  clearSession(); viderCachesListes(); S.catsAutorisees=[]; S.trashCount=0; S.trashProjects=[];
+  updateHeader(); toast('Déconnecté','👋');
+  await loadProjects(); showDashboard();
+}
 
 async function requestAccountDeletion(){
   confirm2('Demander la suppression de mon compte',
-    'Un email sera envoyé à l\'administrateur pour demander la suppression de votre compte. Continuer ?',
+    "Votre demande sera transmise à l'administrateur, qui supprimera votre compte. Les projets que vous avez saisis sont conservés. Continuer ?",
     async()=>{
       try {
-        const d=await apiPost({action:'request-deletion'},{});
-        toast(d.success?(d.message||'Demande envoyée.'):(d.error||'Erreur.'), d.success?'📧':'❌');
-      } catch(e){ toast('Erreur réseau.','❌'); }
-    });
+        const d=await api('auth/demande-suppression',{methode:'POST'});
+        toast(d.message||'Demande transmise.','📨');
+      } catch(e){ toast(apiErrText(e),'❌'); }
+    },{okLabel:'Envoyer la demande'});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2102,6 +2208,11 @@ function closeConfirm(){ document.getElementById('confirm-ov').style.display='no
 /* ═══════════════════════════════════════════════════════════
    AUTH
 ═══════════════════════════════════════════════════════════ */
+/* Plus d'inscription libre ni de mot de passe provisoire : l'administrateur crée le
+   compte, son titulaire reçoit un lien pour choisir son mot de passe (« Première
+   connexion »). Le même parcours sert au mot de passe oublié. */
+const _oeil='<button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>';
+const REGLE_MDP='12 caractères au moins. Le plus simple : une phrase de passe de plusieurs mots (par exemple trois mots et un nombre). Évitez les mots courants, les suites de clavier et votre nom.';
 function openLogin(){
   document.getElementById('auth-ov').classList.add('open');
   document.getElementById('auth-body').innerHTML=`
@@ -2110,132 +2221,58 @@ function openLogin(){
     <div class="fg"><label>Adresse email</label>
       <input type="email" id="a-em" placeholder="prenom.nom@egd.mg" autocomplete="username"></div>
     <div class="fg"><label>Mot de passe</label>
-      <div class="fg-pw"><input type="password" id="a-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      <div class="fg-pw"><input type="password" id="a-pw" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">${_oeil}</div></div>
     <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doLogin()">Se connecter</button>
     <div class="modal-links">
-      <span class="modal-link" onclick="openRegister()">Créer un compte</span>
-      <span class="modal-link" onclick="openForgot()">Mot de passe oublié ?</span>
+      <span class="modal-link" onclick="openLien(true)">Première connexion</span>
+      <span class="modal-link" onclick="openLien(false)">Mot de passe oublié ?</span>
     </div>`;
+  setTimeout(()=>document.getElementById('a-em')?.focus(),50);
 }
-function openRegister(){
-  document.getElementById('auth-body').innerHTML=`
-    <h2><i class="ph ph-user-plus" style="vertical-align:middle"></i> Créer un compte</h2>
-    <div class="msg-info">Votre adresse @egd.mg doit être pré-autorisée par l'administrateur.<br>Un mot de passe provisoire vous sera attribué automatiquement.</div>
-    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
-    <div id="reg-fields">
-      <div class="fg-row">
-        <div class="fg"><label>Prénom</label><input type="text" id="r-pn" placeholder="Jean"></div>
-        <div class="fg"><label>Nom</label><input type="text" id="r-nm" placeholder="DUPONT"></div>
-      </div>
-      <div class="fg"><label>Email @egd.mg</label><input type="email" id="r-em" placeholder="jean.dupont@egd.mg"></div>
-      <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doRegister()">Créer mon compte</button>
-    </div>
-    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
-}
-function openForgot(){
-  document.getElementById('auth-body').innerHTML=`
-    <h2><i class="ph ph-key" style="vertical-align:middle"></i> Mot de passe oublié</h2>
-    <div class="msg-info">Saisissez votre adresse @egd.mg. Vous recevrez un lien de réinitialisation valable 24 h.</div>
-    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
-    <div class="fg"><label>Email @egd.mg</label>
-      <input type="email" id="f-em" placeholder="votre.email@egd.mg" onkeydown="if(event.key==='Enter')doForgotPassword()"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForgotPassword()">Envoyer le lien</button>
-    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
-}
-function openResetForm(token){
+function openLien(premiere){
   document.getElementById('auth-ov').classList.add('open');
   document.getElementById('auth-body').innerHTML=`
-    <h2><i class="ph ph-key" style="vertical-align:middle"></i> Nouveau mot de passe</h2>
-    <div class="msg-info">Choisissez un nouveau mot de passe (min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre).</div>
+    <h2><i class="ph ph-key" style="vertical-align:middle"></i> ${premiere?'Première connexion':'Mot de passe oublié'}</h2>
+    <div class="msg-info">${premiere
+      ? "Votre compte est créé par l'administrateur. Saisissez votre adresse @egd.mg : vous recevrez un lien pour choisir votre mot de passe, valable 24 heures."
+      : 'Saisissez votre adresse @egd.mg. Vous recevrez un lien pour choisir un nouveau mot de passe, valable 24 heures.'}</div>
+    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
+    <div class="fg"><label>Email @egd.mg</label>
+      <input type="email" id="f-em" placeholder="prenom.nom@egd.mg" autocomplete="username" onkeydown="if(event.key==='Enter')doForgotPassword()"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForgotPassword()">Recevoir le lien</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="openLogin()">← Retour</button>`;
+}
+/* Le jeton lu dans l'adresse reste en mémoire : il n'est jamais réinjecté dans le HTML. */
+function openResetForm(jeton){
+  S._jeton=jeton;
+  document.getElementById('auth-ov').classList.add('open');
+  document.getElementById('auth-body').innerHTML=`
+    <h2><i class="ph ph-key" style="vertical-align:middle"></i> Choisir votre mot de passe</h2>
+    <div class="msg-info">${REGLE_MDP}</div>
     <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
     <div class="fg"><label>Nouveau mot de passe</label>
-      <div class="fg-pw"><input type="password" id="f-pw" placeholder="Min. 6 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      <div class="fg-pw"><input type="password" id="f-pw" placeholder="12 caractères au moins" autocomplete="new-password">${_oeil}</div></div>
     <div class="fg"><label>Confirmer</label>
-      <div class="fg-pw"><input type="password" id="f-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doConfirmReset('${token}')"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doConfirmReset('${token}')">Enregistrer</button>`;
+      <div class="fg-pw"><input type="password" id="f-p2" placeholder="Répéter" autocomplete="new-password" onkeydown="if(event.key==='Enter')doConfirmReset()">${_oeil}</div></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doConfirmReset()">Enregistrer et me connecter</button>`;
 }
 function closeAuth(){ document.getElementById('auth-ov').classList.remove('open'); }
 
+/* Après une connexion : la liste est rechargée, elle porte désormais les droits. */
+async function apresConnexion(d, message){
+  saveSession(d); closeAuth(); updateHeader(); toast(message,'👋');
+  await actualiser(true);
+}
 async function doLogin(){
   const btn=event&&event.target;
   if(!setBusy(btn)) return;
-  const em=v('a-em').toLowerCase(), pw=v('a-pw'), err=document.getElementById('ae');
+  const em=v('a-em').toLowerCase(), pw=document.getElementById('a-pw')?.value||'', err=document.getElementById('ae');
   err.style.display='none';
   if(!em||!pw){ err.textContent='Champs obligatoires.'; err.style.display='block'; clearBusy(); return; }
   try {
-    const d=await apiPost({action:'login'},{email:em,password:pw});
-    if(d.success){
-      if(d.user.first_login){
-        S._fcToken=d.token; S._fcEmail=em; S._fcUser=d.user;
-        openForceChangePassword(em,d.token,d.user);
-      } else {
-        S.user=d.user; saveSession(d.user, d.token);
-        localStorage.setItem('lft_e',em);
-        closeAuth(); updateHeader(); toast('Bienvenue '+(d.user.prenom||''),'👋'); renderCurrent();
-      }
-    } else { err.textContent=d.error||'Identifiants incorrects.'; err.style.display='block'; }
+    const d=await api('auth/connexion',{methode:'POST', corps:{email:em, motDePasse:pw}});
+    await apresConnexion(d, 'Bienvenue '+(d.prenom||''));
   } catch(e){ err.textContent=apiErrText(e); err.style.display='block'; }
-  finally { clearBusy(); }
-}
-
-/* Première connexion : changement de mot de passe obligatoire (style Pronote) */
-function openForceChangePassword(email,token,userInfo){
-  document.getElementById('auth-body').innerHTML=`
-    <h2><i class="ph ph-lock-key" style="vertical-align:middle"></i> Première connexion</h2>
-    <div class="msg-info">Bienvenue <strong>${esc(userInfo.prenom||'')} ${esc(userInfo.nom||'')}</strong> !<br>Pour des raisons de sécurité, vous devez choisir un nouveau mot de passe personnel.</div>
-    <div class="msg-err" id="ae"></div><div class="msg-ok" id="ao"></div>
-    <div class="fg"><label>Nouveau mot de passe</label>
-      <div class="fg-pw"><input type="password" id="cp-pw" placeholder="Min. 8 car."><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
-      <div class="fg-hint">Min. 8 caractères · 1 majuscule · 1 minuscule · 1 chiffre</div></div>
-    <div class="fg"><label>Confirmer le mot de passe</label>
-      <div class="fg-pw"><input type="password" id="cp-p2" placeholder="Répéter" onkeydown="if(event.key==='Enter')doForceChange()"><button type="button" class="pw-eye" onclick="togglePw(this)" title="Afficher"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:.3rem" onclick="doForceChange()">Valider mon nouveau mot de passe</button>`;
-  // Stocker temporairement dans S (pas window)
-  S._fcEmail=email; S._fcToken=token; S._fcUser=userInfo;
-}
-
-async function doForceChange(){
-  const btn=event&&event.target;
-  if(!setBusy(btn)) return;
-  const pw=v('cp-pw'), p2=v('cp-p2');
-  const err=document.getElementById('ae'), ok=document.getElementById('ao');
-  err.style.display='none'; ok.style.display='none';
-  if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
-  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; clearBusy(); return; }
-  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir au moins 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; clearBusy(); return; }
-  if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; clearBusy(); return; }
-  try {
-    const oldToken=S._fcToken||'';
-    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'change-password',..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({new_password:pw,token:oldToken}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
-    const d=await r.json();
-    if(d.success){
-      S.user=d.user||S._fcUser; S.user.first_login=false;
-      saveSession(S.user, d.token);
-      localStorage.setItem('lft_e',S._fcEmail);
-      closeAuth(); updateHeader(); toast('Mot de passe modifié — bienvenue '+(S.user.prenom||'')+'!','🔐'); renderCurrent();
-    } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
-  finally { clearBusy(); }
-}
-async function doRegister(){
-  const btn=event&&event.target;
-  if(!setBusy(btn)) return;
-  const pn=v('r-pn'), nm=v('r-nm').toUpperCase(), em=v('r-em').toLowerCase();
-  const err=document.getElementById('ae'), ok=document.getElementById('ao');
-  err.style.display='none'; ok.style.display='none';
-  if(!pn||!nm||!em){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
-  if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; clearBusy(); return; }
-  try {
-    const d=await apiPost({action:'register'},{Email:em,Nom:nm,Prenom:pn});
-    if(d.success){
-      document.getElementById('reg-fields').style.display='none';
-      ok.innerHTML=`<strong>Compte créé avec succès !</strong><br><br>
-        Voici votre mot de passe provisoire :<br>
-        <span style="display:inline-block;margin:.5rem 0;padding:.5rem 1rem;background:rgba(0,83,163,.08);border:1px solid rgba(0,83,163,.2);border-radius:8px;font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--aefe-blue);letter-spacing:.1em;user-select:all">${esc(d.generated_password)}</span><br>
-        <small style="color:var(--t2)">Notez-le précieusement. Vous devrez le modifier lors de votre première connexion.</small>`;
-      ok.style.display='block';
-    } else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
   finally { clearBusy(); }
 }
 async function doForgotPassword(){
@@ -2247,27 +2284,25 @@ async function doForgotPassword(){
   if(!em){ err.textContent='Veuillez saisir votre adresse email.'; err.style.display='block'; clearBusy(); return; }
   if(!em.endsWith('@egd.mg')){ err.textContent='Seules les adresses @egd.mg sont acceptées.'; err.style.display='block'; clearBusy(); return; }
   try {
-    const d=await apiPost({action:'forgot-password'},{email:em});
-    if(d.success){ ok.textContent=d.message||'Email envoyé. Vérifiez votre boîte mail.'; ok.style.display='block'; }
-    else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+    const d=await api('auth/lien',{methode:'POST', corps:{email:em}});
+    ok.textContent=d.message||'Si un compte existe pour cette adresse, un lien vient de lui être envoyé.'; ok.style.display='block';
+  } catch(e){ err.textContent=apiErrText(e); err.style.display='block'; }
   finally { clearBusy(); }
 }
-async function doConfirmReset(token){
+async function doConfirmReset(){
   const btn=event&&event.target;
   if(!setBusy(btn)) return;
-  const pw=v('f-pw'), p2=v('f-p2');
+  const pw=document.getElementById('f-pw')?.value||'', p2=document.getElementById('f-p2')?.value||'';
   const err=document.getElementById('ae'), ok=document.getElementById('ao');
   err.style.display='none'; ok.style.display='none';
   if(!pw||!p2){ err.textContent='Tous les champs sont obligatoires.'; err.style.display='block'; clearBusy(); return; }
-  if(pw.length<8){ err.textContent='Minimum 8 caractères.'; err.style.display='block'; clearBusy(); return; }
-  if(!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)){ err.textContent='Le mot de passe doit contenir 1 majuscule, 1 minuscule et 1 chiffre.'; err.style.display='block'; clearBusy(); return; }
+  if(pw.length<12){ err.textContent='12 caractères au moins.'; err.style.display='block'; clearBusy(); return; }
   if(pw!==p2){ err.textContent='Les mots de passe ne correspondent pas.'; err.style.display='block'; clearBusy(); return; }
   try {
-    const d=await apiPost({action:'confirm-reset'},{token,password:pw});
-    if(d.success){ ok.textContent=d.message||'Mot de passe modifié !'; ok.style.display='block'; setTimeout(openLogin,2200); }
-    else { err.textContent=d.error||'Token invalide ou expiré.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+    const d=await api('auth/mot-de-passe',{methode:'POST', corps:{jeton:S._jeton||'', nouveau:pw}});
+    S._jeton=null;
+    await apresConnexion(d, 'Mot de passe enregistré : bienvenue '+(d.prenom||''));
+  } catch(e){ err.textContent=apiErrText(e); err.style.display='block'; }
   finally { clearBusy(); }
 }
 
@@ -2413,7 +2448,7 @@ function renderDashboard(){
         <div class="tile-icon"><i class="ph-bold ph-house-line"></i></div>
         <div class="tile-name">Projets de l'Internat</div>
         <p class="tile-desc">Accompagnement et vie en résidence</p>
-        <span class="tile-chip tc-muted">Vie scolaire</span>
+        <span class="tile-chip tc-muted">${cnt["Projets de l'Internat"]||0} projets</span>
       </div>
       ${isAdmin
         ? `<div class="dash-tile tile-glass" onclick="showPage('admin')">
@@ -2573,9 +2608,9 @@ function renderDetail(p){
   const s=computeStatus(p);
   const ci=CATS[p.Categorie]||{cb:'cb-def'};
   const cEdit=canEdit(p); const cDel=canDelete(p);
-  const isAdDir=S.user&&(S.user.role==='admin'||S.user.role==='direction');
+  const isAdDir=estDirection();
   const isLocked=p.Locked==='1';
-  const showEdit=cEdit&&(!isLocked||isAdDir);
+  const showEdit=cEdit;   // le serveur tient déjà compte du verrou
   const axN=p.Axe_Projet_Etablissement?(p.Axe_Projet_Etablissement.match(/\d/)||[])[0]:'';
   const ax=AXES.find(a=>String(a.n)===axN);
   const objs=p.Objectifs_Pedagogiques?p.Objectifs_Pedagogiques.split('|').filter(Boolean):'';
@@ -2629,11 +2664,12 @@ function renderDetail(p){
         ${p.Modalite_Valorisation?`<div class="dblock full"><h3>🌟 Valorisation</h3><p>${esc(p.Modalite_Valorisation)}</p></div>`:''}
 
         <!-- Audit info -->
-        ${p.Last_Modified_By?`<div class="dblock full audit-info">
-          <p>📝 Dernière modification par <strong>${esc(p.Last_Modified_By)}</strong> le ${fmt(p.Last_Modified_Date||'')}</p>
+        ${p.Last_Modified_Date||p.Reconduit_De?`<div class="dblock full audit-info">
+          ${p.Last_Modified_Date?`<p>📝 Dernière modification le ${esc(fmtDateHeure(p.Last_Modified_Date))}</p>`:''}
+          ${p.Reconduit_De?`<p>♻️ Reprise du projet ${esc(p.Reconduit_De.code||'')} de ${esc(p.Reconduit_De.annee||'')}</p>`:''}
         </div>`:''}
         ${isLocked?`<div class="dblock full audit-info">
-          <p>🔒 Verrouillé${p.Locked_By?' par <strong>'+esc(p.Locked_By)+'</strong>':''}${p.Locked_Date?' le '+fmt(p.Locked_Date):''}</p>
+          <p>🔒 Projet validé et verrouillé par la direction.</p>
         </div>`:''}
         ${isLocked&&!isAdDir?`<div class="dblock full"><div class="msg-info">🔒 Ce projet est verrouillé. Seuls les administrateurs et la direction peuvent le modifier.</div></div>`:''}
       </div>
@@ -2662,21 +2698,20 @@ function renderDetail(p){
 
 /* ── Comments ── */
 async function loadComments(id){
+  const p=S.projects.find(x=>x.ID_Projet===id);
+  const el0=document.getElementById('comments-list');
+  if(!p){ if(el0) el0.innerHTML=''; return; }
   try {
-    const d=await apiGet({action:'list-comments',id,year:S.year});
+    const d=await api('projets/commentaires',{query:{projet:p._id}});
     const el=document.getElementById('comments-list');
     if(!el) return;
-    if(d.success && d.data && d.data.length){
-      // Les clés proviennent des en-têtes de l'onglet Commentaires_<année> (Code.gs,
-      // ensureCommentsSheet) : ID_Projet, Date_Heure, Email, Nom_Prenom, Commentaire.
-      el.innerHTML=d.data.map(c=>`
+    const l=d.commentaires||[];
+    el.innerHTML=l.length ? l.map(c=>`
         <div class="comment-item">
-          <div class="comment-header"><strong>${esc(c.Nom_Prenom||c.Email||'')}</strong><span class="comment-date">${c.Date_Heure?esc(fmt(c.Date_Heure)):''}</span></div>
-          <div class="comment-body">${esc(c.Commentaire||'')}</div>
-        </div>`).join('');
-    } else {
-      el.innerHTML='<p class="comment-empty">Aucun commentaire pour le moment.</p>';
-    }
+          <div class="comment-header"><strong>${esc(c.auteur_nom||'')}</strong><span class="comment-date">${esc(fmtDateHeure(c.cree_le))}</span></div>
+          <div class="comment-body">${esc(c.texte||'')}</div>
+        </div>`).join('')
+      : '<p class="comment-empty">Aucun commentaire pour le moment.</p>';
   } catch(e){ const el=document.getElementById('comments-list'); if(el) el.innerHTML='<p class="comment-empty">Impossible de charger les commentaires.</p>'; }
 }
 
@@ -2684,12 +2719,13 @@ async function submitComment(id){
   const btn=event&&event.target;
   if(!setBusy(btn)) return;
   const txt=document.getElementById('comment-text');
+  const p=S.projects.find(x=>x.ID_Projet===id);
   if(!txt||!txt.value.trim()){ toast('Veuillez saisir un commentaire.','⚠️'); clearBusy(); return; }
+  if(!p){ clearBusy(); return; }
   try {
-    const d=await apiPost({action:'add-comment'},{id,comment:txt.value.trim()});
-    if(d.success){ txt.value=''; toast('Commentaire ajouté.','💬'); loadComments(id); }
-    else toast(d.error||'Erreur.','❌');
-  } catch(e){ toast('Erreur réseau.','❌'); }
+    await api('projets/commentaires',{methode:'POST', corps:{projet:p._id, texte:txt.value.trim()}});
+    txt.value=''; toast('Commentaire ajouté.','💬'); loadComments(id);
+  } catch(e){ toast(apiErrText(e),'❌'); }
   finally { clearBusy(); }
 }
 
@@ -2705,18 +2741,21 @@ async function doReconduct(id){
     `Créer une copie de « ${nom} » pour l'année scolaire ${target} ? Le contenu est repris ; les dates seront à redéfinir et le statut repassera à « Planifié ». Vous serez ensuite redirigé(e) vers la nouvelle fiche.`,
     async()=>{
       toast('Reconduction en cours…','⏳');
+      if(!p) return;
       try {
-        const d=await apiPost({action:'reconduct'},{id, sourceYear, targetYear:target});
-        if(d && d.success){
+        const d=await api('projets/reconduire',{methode:'POST', corps:{ids:[p._id], annee_cible:target}});
+        const c=(d.crees||[])[0];
+        if(c){
           // Basculer vers l'année cible puis ouvrir directement la fiche reconduite
+          if(!S.years.includes(target)){ S.years.push(target); S.years.sort(); }
           await switchYear(target);
-          const np=S.projects.find(x=>x.ID_Projet===d.id);
-          if(np) goDetail(d.id); else showDashboard();
-          toast('Projet reconduit en '+target+' (réf. '+(d.id||'')+'). Pensez à renseigner les dates.','✅');
+          if(S.projects.find(x=>x.ID_Projet===c.code)) goDetail(c.code); else showDashboard();
+          toast('Projet reconduit en '+target+' (réf. '+c.code+'). Pensez à renseigner les dates.','✅');
         } else {
-          toast((d&&d.error)?('Échec : '+d.error):'La reconduction a échoué.','❌');
+          const motif=((d.ignores||[])[0]||(d.erreurs||[])[0]||{}).motif;
+          toast('Reconduction non effectuée'+(motif?' : '+motif:'.'),'⚠️');
         }
-      } catch(e){ toast('Erreur réseau : la reconduction n\'a pas été effectuée.','❌'); }
+      } catch(e){ toast(apiErrText(e,"Erreur réseau : la reconduction n'a pas été effectuée."),'❌'); }
     },
     {okLabel:'♻️ Reconduire le projet', okStyle:'primary'}
   );
@@ -2749,13 +2788,14 @@ async function openReconductBatch(){
   // Repérer ce qui a déjà été repris, pour ne pas créer de doublons
   let deja=new Set();
   try{
-    const d=await apiGet({action:'list',year:target});
-    if(d && d.success) (d.data||[]).forEach(p=>{ if(p.Reconduit_De) deja.add(p.Reconduit_De); });
-  }catch(e){ /* l'année cible peut être vide : on continue */ }
+    const d=await api('projets/liste',{query:{annee:target}});
+    (d.projets||[]).forEach(p=>{ if(p.reconduit_de) deja.add(p.reconduit_de.id); });
+  }catch(e){ /* l'année cible peut être vide ; le serveur refuse de toute façon les doublons */ }
 
+  // id : identifiant en base (envoyé au serveur) ; code : référence affichée
   _batch.items=S.projects.map(p=>({
-    id:p.ID_Projet, nom:p.Nom_Projet||'Sans titre', cat:p.Categorie||'',
-    ref:p.Enseignant_Referent||'', deja:deja.has(source+'/'+p.ID_Projet)
+    id:p._id, code:p.ID_Projet, nom:p.Nom_Projet||'Sans titre', cat:p.Categorie||'',
+    ref:p.Enseignant_Referent||'', deja:deja.has(p._id)
   }));
   renderBatchList();
 }
@@ -2799,7 +2839,7 @@ function renderBatchItems(){
         ${i.deja?'disabled':''} ${_batch.selected.has(i.id)?'checked':''}
         onchange="batchToggle('${jsq(i.id)}',this.checked)">
       <label for="bcb-${esc(i.id)}">${esc(i.nom)}
-        <span class="bi-meta">${esc(i.id)} · ${esc(i.cat)}${i.ref?' · '+esc(i.ref):''}</span>
+        <span class="bi-meta">${esc(i.code)} · ${esc(i.cat)}${i.ref?' · '+esc(i.ref):''}</span>
       </label>
       ${i.deja?'<span class="batch-done-tag">déjà repris</span>':''}
     </div>`).join('');
@@ -2836,15 +2876,11 @@ async function runReconductBatch(){
   const {source,target}=_batch;
   btn.disabled=true; btn.textContent=`Reconduction de ${ids.length} projet(s)…`;
   try{
-    const d=await apiPost({action:'reconduct-batch'},{ids, sourceYear:source, targetYear:target});
-    if(d && d.success){
-      renderBatchReport(d);
-    } else {
-      err.textContent=(d&&d.error)?d.error:'La reconduction a échoué.'; err.style.display='block';
-      btn.disabled=false; btn.textContent=`Reconduire la sélection vers ${target}`;
-    }
+    const d=await api('projets/reconduire',{methode:'POST', corps:{ids, annee_cible:target}});
+    if(!S.years.includes(d.annee)){ S.years.push(d.annee); S.years.sort(); renderYearSelector(); }
+    renderBatchReport(d);
   }catch(e){
-    err.textContent='Erreur réseau : aucune reconduction effectuée.'; err.style.display='block';
+    err.textContent=apiErrText(e,'Erreur réseau : aucune reconduction effectuée.'); err.style.display='block';
     btn.disabled=false; btn.textContent=`Reconduire la sélection vers ${target}`;
   }
 }
@@ -2854,37 +2890,39 @@ function renderBatchReport(d){
   document.getElementById('batch-body').innerHTML=`
     <h2>✅ Reconduction terminée</h2>
     <div class="batch-report">
-      <p><span class="ok">${crees.length} projet(s) créé(s)</span> dans ${esc(d.year)}.</p>
-      ${crees.length?`<ul>${crees.slice(0,12).map(c=>`<li>${esc(c.nom)} → <strong>${esc(c.id)}</strong></li>`).join('')}
+      <p><span class="ok">${crees.length} projet(s) créé(s)</span> dans ${esc(d.annee)}.</p>
+      ${crees.length?`<ul>${crees.slice(0,12).map(c=>`<li>${esc(c.nom)} → <strong>${esc(c.code)}</strong></li>`).join('')}
         ${crees.length>12?`<li>… et ${crees.length-12} autre(s)</li>`:''}</ul>`:''}
       ${ignores.length?`<p><span class="warn">${ignores.length} ignoré(s)</span> car déjà reconduit(s).</p>`:''}
       ${erreurs.length?`<p><span class="err">${erreurs.length} en erreur</span> :</p>
-        <ul>${erreurs.slice(0,8).map(e=>`<li>${esc(e.id)} — ${esc(e.motif)}</li>`).join('')}</ul>`:''}
+        <ul>${erreurs.slice(0,8).map(e=>`<li>${esc(e.code||e.nom||'?')} : ${esc(e.motif)}</li>`).join('')}</ul>`:''}
       <p style="color:var(--t2)">Les dates n'ont pas été reprises : pensez à les renseigner
       sur chaque nouvelle fiche.</p>
     </div>
     <button class="btn btn-primary" style="width:100%;margin-top:.6rem"
-      onclick="closeBatch(); switchYear('${jsq(d.year)}')">Voir ${esc(d.year)}</button>
+      onclick="closeBatch(); switchYear('${jsq(d.annee)}')">Voir ${esc(d.annee)}</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="closeBatch()">Rester sur ${esc(_batch.source)}</button>`;
-  toast(crees.length+' projet(s) reconduit(s) vers '+d.year,'♻️');
+  toast(crees.length+' projet(s) reconduit(s) vers '+d.annee,'♻️');
 }
 
 /* ── Lock / Unlock ── */
 async function toggleLock(id,lock){
-  const action=lock?'lock-project':'unlock-project';
+  const p0=S.projects.find(x=>x.ID_Projet===id);
+  if(!p0) return;
   try {
-    const d=await apiPost({action},{id});
-    if(d.success){ await loadProjects(); const p=S.projects.find(x=>x.ID_Projet===id); if(p){ S.sel=p; renderDetail(p); } toast(lock?'Projet verrouillé.':'Projet déverrouillé.',lock?'🔒':'🔓'); }
-    else toast(d.error||'Erreur.','❌');
-  } catch(e){ toast('Erreur réseau.','❌'); }
+    await api('projets/verrou',{methode:'POST', corps:{id:p0._id, verrouiller:!!lock}});
+    await loadProjects();
+    const p=S.projects.find(x=>x.ID_Projet===id); if(p){ S.sel=p; renderDetail(p); }
+    toast(lock?'Projet verrouillé.':'Projet déverrouillé.',lock?'🔒':'🔓');
+  } catch(e){ toast(apiErrText(e),'❌'); }
 }
 
 /* ── Trash ── */
 async function loadTrashCount(){
-  if(!S.user||(S.user.role!=='admin'&&S.user.role!=='direction')) return;
+  if(!estDirection()){ S.trashCount=0; S.trashProjects=[]; return; }
   try {
-    const d=await apiPost({action:'list-trash'},{});
-    if(d.success){ S.trashProjects=d.data||[]; S.trashCount=S.trashProjects.length; }
+    const d=await api('projets/corbeille',{query:{annee:S.year}});
+    S.trashProjects=(d.projets||[]).map(depuisApi); S.trashCount=S.trashProjects.length;
   } catch(e){}
 }
 
@@ -2899,46 +2937,39 @@ function renderTrash(mc){
 }
 
 async function loadTrashList(){
-  try {
-    const d=await apiPost({action:'list-trash'},{});
-    const el=document.getElementById('trash-list');
-    if(!el) return;
-    if(d.success && d.data && d.data.length){
-      S.trashProjects=d.data; S.trashCount=d.data.length;
-      el.innerHTML=d.data.map(p=>`
+  await loadTrashCount();
+  const el=document.getElementById('trash-list');
+  if(!el) return;
+  const l=S.trashProjects||[];
+  el.innerHTML=l.length ? l.map(p=>`
         <div class="admin-card trash-card">
           <div class="trash-info">
-            <strong>${esc(p.Nom_Projet||'Sans titre')}</strong>
-            <span class="trash-meta">${esc(p.Categorie||'')} · Supprimé par ${esc(p.Deleted_By||'?')} le ${p.Deleted_Date?esc(fmt(p.Deleted_Date)):'?'}</span>
+            <strong>${esc(p.ID_Projet)} · ${esc(p.Nom_Projet||'Sans titre')}</strong>
+            <span class="trash-meta">${esc(p.Categorie||'')} · Mis à la corbeille${p.Deleted_By?' par '+esc(p.Deleted_By):''}${p.Deleted_Date?' le '+esc(fmtDateHeure(p.Deleted_Date)):''}</span>
           </div>
           <div class="trash-actions">
-            <button class="btn btn-add btn-xs" onclick="restoreProject('${jsq(p.ID_Projet)}')">Restaurer</button>
-            <button class="btn btn-danger btn-xs" onclick="permanentDelete('${jsq(p.ID_Projet)}','${jsq(p.Nom_Projet||'')}')">Supprimer définitivement</button>
+            <button class="btn btn-add btn-xs" onclick="restoreProject('${jsq(p._id)}')">Restaurer</button>
+            <button class="btn btn-danger btn-xs" onclick="permanentDelete('${jsq(p._id)}','${jsq(p.Nom_Projet||'')}')">Supprimer définitivement</button>
           </div>
-        </div>`).join('');
-    } else {
-      el.innerHTML='<div class="comment-empty" style="text-align:center;padding:2rem">La corbeille est vide.</div>';
-    }
-  } catch(e){ const el=document.getElementById('trash-list'); if(el) el.innerHTML='<p>Erreur de chargement.</p>'; }
+        </div>`).join('')
+    : `<div class="comment-empty" style="text-align:center;padding:2rem">La corbeille de ${esc(S.year)} est vide.</div>`;
 }
 
 async function restoreProject(id){
   confirm2('Restaurer ce projet','Voulez-vous restaurer ce projet ?', async()=>{
     try {
-      const d=await apiPost({action:'restore'},{id});
-      if(d.success){ await loadProjects(); await loadTrashCount(); loadTrashList(); toast('Projet restauré.','♻️'); }
-      else toast(d.error||'Erreur.','❌');
-    } catch(e){ toast('Erreur réseau.','❌'); }
+      await api('projets/corbeille',{methode:'POST', corps:{id, geste:'restaurer'}});
+      await loadProjects(); loadTrashList(); toast('Projet restauré.','♻️');
+    } catch(e){ toast(apiErrText(e),'❌'); }
   }, {okLabel:'Restaurer', okStyle:'primary'});
 }
 
 async function permanentDelete(id,name){
-  confirm2('Suppression définitive',`Supprimer définitivement "${name}" ? Cette action est irréversible.`, async()=>{
+  confirm2('Suppression définitive',`Supprimer définitivement « ${name} » ? Cette action est irréversible.`, async()=>{
     try {
-      const d=await apiPost({action:'permanent-delete'},{id});
-      if(d.success){ await loadTrashCount(); loadTrashList(); toast('Projet supprimé définitivement.','💀'); }
-      else toast(d.error||'Erreur.','❌');
-    } catch(e){ toast('Erreur réseau.','❌'); }
+      await api('projets/corbeille',{methode:'POST', corps:{id, geste:'supprimer'}});
+      loadTrashList(); toast('Projet supprimé définitivement.','🗑️');
+    } catch(e){ toast(apiErrText(e),'❌'); }
   });
 }
 
@@ -2968,7 +2999,11 @@ function renderForm(p){
   const ed=!!p;
   document.getElementById('form-ov').classList.add('open');
   const axOpts=AXES.map(a=>`<option value="Axe ${a.n}" ${p&&(p.Axe_Projet_Etablissement||'').includes(String(a.n))?'selected':''}>Axe ${a.n} — ${a.t.slice(0,52)}…</option>`).join('');
-  const catOpts=Object.keys(CATS).map(c=>`<option value="${c}" ${p&&p.Categorie===c?'selected':''}>${c}</option>`).join('');
+  // Catégories proposées : celles que le serveur ouvre à cette personne (la vie scolaire
+  // n'a que les clubs et l'internat), plus celle de la fiche modifiée.
+  const ouvertes=estDirection()?Object.keys(CATS):(S.catsAutorisees||[]);
+  const cats=Object.keys(CATS).filter(c=>ouvertes.includes(c)||(p&&p.Categorie===c));
+  const catOpts=cats.map(c=>`<option value="${esc(c)}" ${p&&p.Categorie===c?'selected':''}>${esc(c)}</option>`).join('');
   document.getElementById('form-body').innerHTML=`
     <h2>${ed?'<i class="ph ph-pencil-simple" style="vertical-align:middle"></i> Modifier le projet':'<i class="ph ph-plus-circle" style="vertical-align:middle"></i> Nouveau projet'}</h2>
     <div class="msg-err" id="fe"></div>
@@ -2980,7 +3015,7 @@ function renderForm(p){
       <div class="fg"><label>Priorité *</label>
         <select id="f-prio">
           <option value="Haute" ${p&&p.Priorite==='Haute'?'selected':''}>Haute</option>
-          <option value="Moyenne" ${!p||p.Priorite==='Moyenne'?'selected':''}>Moyenne</option>
+          <option value="Moyenne" ${!p||!p.Priorite||p.Priorite==='Moyenne'?'selected':''}>Moyenne</option>
           <option value="Basse" ${p&&p.Priorite==='Basse'?'selected':''}>Basse</option>
         </select>
       </div>
@@ -3177,11 +3212,12 @@ async function doAdd(){
   const err=document.getElementById('fe'); err.style.display='none';
   const fd=getFormData();
   if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; clearBusy(); return; }
+  if(fd.Date_Debut&&fd.Date_Fin&&fd.Date_Fin<fd.Date_Debut){ err.textContent='La date de fin précède la date de début.'; err.style.display='block'; clearBusy(); return; }
   try {
-    const d=await apiPost({action:'add',table:'Projets'},fd);
-    if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet créé !','✅'); }
-    else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+    const d=await api('projets/fiche',{methode:'POST', corps:{annee:S.year, ...versApi(fd)}});
+    closeForm(); await loadProjects(); renderCurrent();
+    toast('Projet créé'+(d.projet&&d.projet.code?' (réf. '+d.projet.code+')':'')+'.','✅');
+  } catch(e){ err.textContent=apiErrText(e); err.style.display='block'; }
   finally { clearBusy(); }
 }
 
@@ -3189,36 +3225,47 @@ async function doUpdate(id){
   const btn=event&&event.target;
   if(!setBusy(btn)) return;
   const err=document.getElementById('fe'); err.style.display='none';
-  const fd={...getFormData(),ID_Projet:id};
+  const fd=getFormData();
+  const p=S.projects.find(x=>x.ID_Projet===id);
+  if(!p){ clearBusy(); return; }
   if(!fd.Nom_Projet){ err.textContent='Le nom du projet est obligatoire.'; err.style.display='block'; clearBusy(); return; }
+  if(fd.Date_Debut&&fd.Date_Fin&&fd.Date_Fin<fd.Date_Debut){ err.textContent='La date de fin précède la date de début.'; err.style.display='block'; clearBusy(); return; }
   try {
-    const d=await apiPost({action:'update',table:'Projets'},fd);
-    if(d.success){ closeForm(); await loadProjects(); renderCurrent(); toast('Projet mis à jour !','✅'); }
-    else { err.textContent=d.error||'Erreur.'; err.style.display='block'; }
-  } catch(e){ err.textContent='Erreur réseau.'; err.style.display='block'; }
+    // modifie_le : si un collègue a enregistré la fiche entre-temps, le serveur refuse
+    // (409) au lieu d'écraser son travail.
+    const d=await api('projets/fiche',{methode:'PATCH', corps:{id:p._id, modifie_le:p._modifie_le, ...versApi(fd)}});
+    closeForm(); await loadProjects(); renderCurrent();
+    toast(d.inchange?'Aucune modification à enregistrer.':'Projet mis à jour.', d.inchange?'ℹ️':'✅');
+  } catch(e){
+    err.textContent = e.statut===409
+      ? "Un collègue a modifié cette fiche pendant que vous la remplissiez. Copiez vos ajouts, fermez le formulaire : la fiche à jour s'affichera, puis rouvrez-la."
+      : apiErrText(e);
+    err.style.display='block';
+    if(e.statut===409) loadProjects().then(()=>{ const q=S.projects.find(x=>x._id===p._id); if(q){ S.sel=q; if(S.page==='detail') renderDetail(q); } });
+  }
   finally { clearBusy(); }
 }
 
 async function delProject(id){
   const p=S.projects.find(x=>x.ID_Projet===id);
   if(!p) return;
-  confirm2('Mettre à la corbeille',`Déplacer "${esc(p.Nom_Projet)}" vers la corbeille ?`, async()=>{
-    const d=await apiPost({action:'delete'},{table:'Projets',id});
-    if(d.success){ await loadProjects(); await loadTrashCount(); showDashboard(); toast('Projet déplacé vers la corbeille.','🗑️'); }
-    else toast(d.error||'Erreur.','❌');
+  confirm2('Mettre à la corbeille',`Déplacer « ${p.Nom_Projet} » vers la corbeille ?`, async()=>{
+    try {
+      await api('projets/corbeille',{methode:'POST', corps:{id:p._id, geste:'jeter'}});
+      await Promise.all([loadProjects(), loadTrashCount()]); showDashboard(); toast('Projet déplacé vers la corbeille.','🗑️');
+    } catch(e){ toast(apiErrText(e),'❌'); }
   });
 }
 
 async function doExport(){
   try {
     toast('Export en cours…','📥');
-    const r=await fetch(API_URL+'?'+new URLSearchParams({action:'export',..._devInfo()}),{method:'POST',redirect:'follow',body:JSON.stringify({..._auth()}),headers:{'Content-Type':'text/plain;charset=utf-8'}});
-    if(!r.ok){ toast('Erreur export.','❌'); return; }
-    const csv=await r.text();
-    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const r=await fetch('/api/projets/export?'+new URLSearchParams({annee:S.year}),{credentials:'same-origin', cache:'no-store'});
+    if(!r.ok){ let m='Export impossible.'; try { m=(await r.json()).message||m; }catch(e){} toast(m,'❌'); return; }
+    const blob=await r.blob();   // le serveur fournit déjà la marque d'ordre des octets pour Excel
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download='projets-lft-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.href=url; a.download='projets-lft-'+S.year+'.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Export téléchargé !','✅');
@@ -3479,7 +3526,7 @@ function renderClubs(mc){
 /* INTERNAT */
 function renderInternat(mc){
   const re=/\binternat\b/i;
-  const ip=S.projects.filter(p=>re.test(p.Nom_Projet||'')||re.test(p.Description||'')||re.test(p.Niveaux_Concernes||''));
+  const ip=S.projects.filter(p=>p.Categorie==="Projets de l'Internat"||re.test(p.Nom_Projet||'')||re.test(p.Description||'')||re.test(p.Niveaux_Concernes||''));
   mc.innerHTML=`
     <div class="sec-hd">
       <div class="sec-title">🏠 Projets de l'Internat</div>
@@ -3501,100 +3548,83 @@ function renderInternat(mc){
     </div>`}`;
 }
 
-/* ADMIN */
-/* ── Sauvegarde du classeur ──
-   Le Google Sheet est la base de données : sans copie, une suppression de ligne
-   est définitive. Le serveur duplique le classeur chaque nuit ; ce bloc permet
-   d'en vérifier l'état et de déclencher une sauvegarde avant une opération à
-   risque (reconduction en lot, purge de corbeille). */
-function backupCardHTML(bk){
-  if(!bk||!bk.success){
-    return `<div class="admin-card">
-      <div class="admin-card-hd"><i class="ph ph-floppy-disk" style="margin-right:.3rem"></i> Sauvegarde</div>
-      <div class="msg-info" style="margin:.4rem 0">Fonction indisponible : le backend n'a pas encore été redéployé avec la sauvegarde automatique.</div>
-    </div>`;
-  }
-  const e=bk.etat||{};
-  const actif=!!e.declencheur_actif;
-  return `<div class="admin-card">
-    <div class="admin-card-hd"><i class="ph ph-floppy-disk" style="margin-right:.3rem"></i> Sauvegarde <small>${e.nombre||0} copie(s)</small></div>
-    <div class="row-item">
-      <div class="row-info">
-        <div class="row-name">${actif?'✅ Sauvegarde automatique active':'⚠️ Sauvegarde automatique inactive'}</div>
-        <div class="row-sub">${e.derniere?('Dernière copie : '+esc(e.derniere)):'Aucune copie enregistrée'}${actif?' · chaque nuit, 30 jours conservés':''}</div>
-      </div>
-    </div>
-    ${actif?'':`<div class="msg-info" style="margin:.4rem 0">Exécutez une fois <code>installBackupTrigger()</code> depuis l'éditeur Apps Script pour activer la sauvegarde nocturne et accorder l'accès à Drive.</div>`}
-    <button class="btn btn-add btn-xs" id="btn-backup" style="width:100%;margin-top:.4rem" onclick="doBackupNow()">Sauvegarder maintenant</button>
-  </div>`;
-}
+/* ADMIN
+   Plus de liste d'adresses autorisées ni de mot de passe provisoire : autoriser
+   quelqu'un, c'est lui créer son compte ; il choisit son mot de passe par le lien
+   « Première connexion ». La sauvegarde est assurée par Supabase.
+   Changer un rôle ou supprimer un compte redemande le mot de passe de l'administrateur. */
+const ROLE_L={admin:'admin', direction:'direction', vie_scolaire:'vie scolaire', enseignant:'enseignant', eleve:'élève'};
 
-async function doBackupNow(){
-  const btn=document.getElementById('btn-backup');
-  if(btn){ btn.disabled=true; btn.textContent='Sauvegarde en cours…'; }
-  try{
-    const d=await apiPost({action:'backup-now'},{});
-    if(d&&d.success){
-      toast('Sauvegarde effectuée.','💾');
-      renderAdmin(document.getElementById('mc'));
-    } else {
-      toast((d&&d.error)?d.error:'Sauvegarde impossible.','❌');
-      if(btn){ btn.disabled=false; btn.textContent='Sauvegarder maintenant'; }
+/* Fenêtre de ressaisie du mot de passe. Renvoie le mot de passe, ou null si annulé. */
+function demanderMotDePasse(titre, message){
+  return new Promise(resolve=>{
+    let ov=document.getElementById('pw-ov');
+    if(!ov){
+      ov=document.createElement('div'); ov.id='pw-ov'; ov.className='overlay';
+      ov.innerHTML='<div class="modal"><button class="modal-close" id="pw-x">✕</button><div id="pw-body"></div></div>';
+      document.body.appendChild(ov);
     }
-  }catch(e){
-    toast('Erreur réseau : sauvegarde non effectuée.','❌');
-    if(btn){ btn.disabled=false; btn.textContent='Sauvegarder maintenant'; }
-  }
+    document.getElementById('pw-body').innerHTML=`
+      <h2><i class="ph ph-lock-key" style="vertical-align:middle"></i> ${esc(titre)}</h2>
+      <div class="msg-info">${esc(message)}</div>
+      <div class="fg"><label>Votre mot de passe</label>
+        <div class="fg-pw"><input type="password" id="pw-in" autocomplete="current-password">${_oeil}</div></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:.3rem" id="pw-ok">Confirmer</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" id="pw-no">Annuler</button>`;
+    const inp=document.getElementById('pw-in');
+    const fin=(val)=>{ ov.classList.remove('open'); resolve(val); };
+    document.getElementById('pw-ok').onclick=()=>fin(inp.value||null);
+    document.getElementById('pw-no').onclick=()=>fin(null);
+    document.getElementById('pw-x').onclick=()=>fin(null);
+    inp.onkeydown=(e)=>{ if(e.key==='Enter') fin(inp.value||null); };
+    ov.classList.add('open');
+    setTimeout(()=>inp.focus(),50);
+  });
 }
 
 async function renderAdmin(mc){
   if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
-  mc.innerHTML=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div><div class="loader"><div class="spin"></div> Chargement…</div>`;
-  try {
-    // Chaque appel est isolé : un échec (serveur Google lent ou « Page introuvable »
-    // transitoire) ne doit pas masquer les autres cartes. On signale ce qui manque.
-    const KO={success:false,_ko:true};
-    const [ud,ed,ld,bk]=await Promise.all([
-      apiPost({action:'list-users'},{}).catch(()=>KO),
-      apiPost({action:'list-emails'},{}).catch(()=>KO),
-      apiPost({action:'get-logs'},{}).catch(()=>KO),
-      apiPost({action:'backup-status'},{}).catch(()=>KO)
-    ]);
-    if(ud._ko&&ed._ko&&ld._ko&&bk._ko) throw new Error('serveur injoignable');
-    const manquant=[ud._ko&&'utilisateurs',ed._ko&&'adresses autorisées',ld._ko&&'journal',bk._ko&&'sauvegardes'].filter(Boolean);
-    const us=ud.success?ud.data||[]:[];
-    const em=ed.success?ed.data||[]:[];
-    const logs=ld.success?ld.data||[]:[];
-    const roleTag=(r)=>`<span class="role-tag ${r==='admin'?'rt-admin':r==='direction'?'rt-dir':r==='vie_scolaire'?'rt-vs':'rt-teacher'}">${r==='vie_scolaire'?'vie scolaire':r||'enseignant'}</span>`;
-    mc.innerHTML=`
-      <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
+  const entete=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>`;
+  mc.innerHTML=entete+`<div class="loader"><div class="spin"></div> Chargement…</div>`;
+  // Chaque appel est isolé : un échec ne masque pas l'autre carte.
+  const [cd,jd]=await Promise.all([
+    api('admin/comptes').catch(e=>({_ko:e})),
+    api('admin/journal',{query:{limite:300}}).catch(e=>({_ko:e})),
+  ]);
+  if(S.page!=='admin') return;
+  if(cd._ko && jd._ko){
+    mc.innerHTML=entete+`<div class="empty"><span class="empty-icon">⚠️</span><p>${esc(apiErrText(cd._ko))}</p><button class="btn btn-primary" onclick="renderAdmin(document.getElementById('mc'))">Réessayer</button></div>`;
+    return;
+  }
+  const manquant=[cd._ko&&'comptes', jd._ko&&'journal'].filter(Boolean);
+  const us=cd.comptes||[], logs=jd.journal||[];
+  const roleTag=(r)=>`<span class="role-tag ${r==='admin'?'rt-admin':r==='direction'?'rt-dir':r==='vie_scolaire'?'rt-vs':'rt-teacher'}">${esc(ROLE_L[r]||r||'enseignant')}</span>`;
+  const enAttente=us.filter(u=>u.actif&&!u.active).length;
+  mc.innerHTML=entete+`
       ${manquant.length?`<div class="state-notice"><div class="sn-ico"><i class="ph-bold ph-warning"></i></div><div><strong>Chargement incomplet.</strong> <span>Le serveur n'a pas répondu pour : ${esc(manquant.join(', '))}.</span></div><button class="btn btn-ghost btn-xs" onclick="renderAdmin(document.getElementById('mc'))">Réessayer</button></div>`:''}
       <div class="admin-grid">
-        ${backupCardHTML(bk)}
         <div class="admin-card">
-          <div class="admin-card-hd"><i class="ph ph-users-three" style="margin-right:.3rem"></i> Utilisateurs <small>${us.length} comptes</small></div>
+          <div class="admin-card-hd"><i class="ph ph-users-three" style="margin-right:.3rem"></i> Comptes <small>${us.length} comptes${enAttente?' · '+enAttente+' sans mot de passe choisi':''}</small></div>
           ${us.map(u=>{
-            const isSelf=u.Email===(S.user&&S.user.email);
-            const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.Role?'selected':''}>${r==='vie_scolaire'?'vie scolaire':r}</option>`).join('');
-            const fl=u.First_Login==='1';
-            const inactif=String(u.Actif||'')==='0';   // colonne absente ou vide = actif
+            const isSelf=u.email===(S.user&&S.user.email);
+            const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.role?' selected':''}>${ROLE_L[r]}</option>`).join('');
+            const inactif=!u.actif;
             return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem${inactif?';opacity:.55':''}">
               <div class="row-info" style="flex:1;min-width:0">
-                <div class="row-name">${esc(u.Prenom||'')} ${esc(u.Nom||'')} ${inactif?'<span style="font-size:.6rem;color:#dc2626;font-weight:700;margin-left:.3rem">● désactivé</span>':(fl?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● 1ère connexion</span>':'')}</div>
-                <div class="row-sub">${esc(u.Email||'')} ${u.Mdp_Initial?'<span style="font-size:.65rem;color:var(--t3);margin-left:.3rem">mdp : <code style="background:rgba(0,83,163,.06);padding:.1rem .3rem;border-radius:4px;font-family:monospace;color:var(--aefe-blue)">'+esc(u.Mdp_Initial)+'</code></span>':''}</div>
+                <div class="row-name">${esc(u.prenom||'')} ${esc(u.nom||'')} ${inactif?'<span style="font-size:.6rem;color:#dc2626;font-weight:700;margin-left:.3rem">● désactivé</span>':(!u.active?'<span style="font-size:.6rem;color:var(--s-plan);font-weight:700">● mot de passe pas encore choisi</span>':'')}</div>
+                <div class="row-sub">${esc(u.email||'')}${u.derniere_connexion?' · dernière connexion le '+esc(fmtDateHeure(u.derniere_connexion)):''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
                 ${isSelf
-                  ? roleTag(u.Role)
-                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${jsq(u.Email)}',this)">${roleOpts}</select>`
-                }
-                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="adminResetPwd('${jsq(u.Email)}')" title="Réinitialiser le mot de passe">🔑</button>`:''}
-                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .45rem;border-radius:6px;border:1px solid ${inactif?'rgba(22,163,74,.3)':'rgba(234,179,8,.35)'};background:${inactif?'rgba(22,163,74,.10)':'rgba(234,179,8,.12)'};color:${inactif?'#15803d':'#a16207'}" onclick="setUserActive('${jsq(u.Email)}',${inactif?1:0})" title="${inactif?'Réactiver ce compte':'Désactiver ce compte (ses projets sont conservés)'}">${inactif?'Réactiver':'Désactiver'}</button>`:''}
-                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${jsq(u.Email)}')">✕</button>`:''}
+                  ? roleTag(u.role)
+                  : `<select class="admin-input" style="padding:.18rem .4rem;font-size:.72rem;height:auto" onchange="changeRole('${jsq(u.id)}',this)">${roleOpts}</select>`}
+                ${!isSelf&&!inactif?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .4rem;background:rgba(0,83,163,.08);color:var(--aefe-blue);border:1px solid rgba(0,83,163,.2);border-radius:6px" onclick="envoyerLienCompte('${jsq(u.id)}','${jsq(u.email)}')" title="Envoyer un lien pour choisir son mot de passe">🔑</button>`:''}
+                ${!isSelf?`<button class="btn-xs" style="font-size:.65rem;padding:.15rem .45rem;border-radius:6px;border:1px solid ${inactif?'rgba(22,163,74,.3)':'rgba(234,179,8,.35)'};background:${inactif?'rgba(22,163,74,.10)':'rgba(234,179,8,.12)'};color:${inactif?'#15803d':'#a16207'}" onclick="setUserActive('${jsq(u.id)}','${jsq(u.email)}',${inactif?1:0})" title="${inactif?'Réactiver ce compte':'Désactiver ce compte (ses projets sont conservés)'}">${inactif?'Réactiver':'Désactiver'}</button>`:''}
+                ${!isSelf?`<button class="btn-xs bx-del" onclick="delUser('${jsq(u.id)}','${jsq(u.email)}')" title="Supprimer le compte">✕</button>`:''}
               </div>
             </div>`;
-          }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun utilisateur.</p>'}
-          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-user-plus" style="margin-right:.2rem"></i> Créer un compte <small style="color:var(--t3);font-weight:400">mot de passe auto-généré</small></div>
+          }).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun compte.</p>'}
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-user-plus" style="margin-right:.2rem"></i> Créer un compte</div>
           <div class="fg-row" style="gap:.5rem;margin-top:.45rem">
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Prénom</label><input class="admin-input" type="text" id="nu-pn" placeholder="Jean"></div>
             <div class="fg" style="flex:1;min-width:0"><label style="font-size:.7rem">Nom</label><input class="admin-input" type="text" id="nu-nm" placeholder="DUPONT"></div>
@@ -3610,30 +3640,24 @@ async function renderAdmin(mc){
               </select>
             </div>
           </div>
-          <button class="btn-xs bx-add" onclick="addUser()" style="width:100%;margin-top:.4rem">Créer l'utilisateur</button>
+          <label style="display:flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--t2);margin:.4rem 0"><input type="checkbox" id="nu-lien" checked> Envoyer tout de suite le lien de première connexion</label>
+          <button class="btn-xs bx-add" onclick="addUser()" style="width:100%;margin-top:.4rem">Créer le compte</button>
         </div>
         <div class="admin-card">
-          <div class="admin-card-hd"><i class="ph ph-envelope-simple" style="margin-right:.2rem"></i> Emails autorisés <small>${em.length} adresses</small></div>
-          <p style="font-size:.75rem;color:var(--t3);margin-bottom:.6rem">Adresses @egd.mg pouvant s'auto-inscrire.</p>
-          ${em.map(e=>`<div class="row-item">
-            <span style="font-size:.82rem;color:var(--t1)">${jsq(e.Email||e)}</span>
-            <button class="btn-xs bx-del" onclick="delEmail('${jsq(e.Email||e)}')">✕</button>
-          </div>`).join('')||'<p style="font-size:.78rem;color:var(--t3)">Aucun email autorisé.</p>'}
-          <div class="admin-input-row">
-            <input class="admin-input" type="email" id="new-em" placeholder="prenom.nom@egd.mg">
-            <button class="btn-xs bx-add" onclick="addEmail()">Ajouter</button>
-          </div>
-          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-chart-bar" style="margin-right:.2rem"></i> Statistiques</div>
+          <div class="admin-card-hd"><i class="ph ph-shield-check" style="margin-right:.2rem"></i> Sécurité et sauvegarde</div>
+          <p style="font-size:.78rem;color:var(--t2);margin:.4rem 0">La base est hébergée par Supabase (Francfort, Union européenne) et sauvegardée chaque jour. Aucun mot de passe n'est visible, ni ici ni ailleurs : chacun choisit le sien par le lien reçu.</p>
+          <p style="font-size:.78rem;color:var(--t2);margin:.4rem 0">Le rôle admin n'est attribuable qu'aux adresses inscrites dans la configuration du serveur.</p>
+          <div class="admin-card-hd" style="margin-top:1.1rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.8rem"><i class="ph ph-chart-bar" style="margin-right:.2rem"></i> Statistiques ${esc(S.year)}</div>
           <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.5rem">
-            ${Object.entries(CATS).map(([cat,i])=>{
+            ${Object.keys(CATS).map(cat=>{
               const cnt=S.projects.filter(p=>p.Categorie===cat).length;
-              return `<div style="text-align:center"><div style="font-family:'Spectral',Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.65rem;color:var(--t3)">${cat}</div></div>`;
+              return `<div style="text-align:center"><div style="font-family:'Spectral',Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--t0)">${cnt}</div><div style="font-size:.65rem;color:var(--t3)">${esc(cat)}</div></div>`;
             }).join('')}
             <div style="text-align:center"><div style="font-family:'Spectral',Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--aefe-blue)">${S.projects.length}</div><div style="font-size:.65rem;color:var(--t3)">Total</div></div>
           </div>
         </div>
         <div class="admin-card full">
-          <div class="admin-card-hd"><i class="ph ph-clipboard-text" style="margin-right:.2rem"></i> Journal d'activité <small>${logs.length} entrées</small></div>
+          <div class="admin-card-hd"><i class="ph ph-clipboard-text" style="margin-right:.2rem"></i> Journal d'activité <small>${logs.length} dernières entrées</small></div>
           <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:.73rem">
               <thead><tr style="color:var(--t3)">
@@ -3644,107 +3668,90 @@ async function renderAdmin(mc){
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Lieu</th>
                 <th style="text-align:left;padding:.3rem .5rem;border-bottom:1px solid rgba(255,255,255,.08)">Système</th>
               </tr></thead>
-              <tbody>${logs.slice(0,100).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${esc(l.Date_Heure||'')}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2)">${esc(l.Email||'')} ${l.Role?roleTag(l.Role):''}</td>
-                <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${esc(l.Action||'')}</td>
-                <td style="padding:.28rem .5rem;color:var(--t2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.Detail||'')}</td>
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Ville,l.Pays].filter(Boolean).map(x=>esc(x)).join(', ')||'—'}</td>
-                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.Navigateur,l.OS,l.Appareil].filter(Boolean).map(x=>esc(x)).join(' · ')||'—'}</td>
-              </tr>`).join('')||'<tr><td colspan="6" style="color:var(--t3);padding:.5rem">Aucun journal.</td></tr>'}
+              <tbody>${logs.slice(0,150).map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${esc(fmtDateHeure(l.quand))}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2)">${esc(l.email||'')} ${l.role?roleTag(l.role):''}</td>
+                <td style="padding:.28rem .5rem;color:var(--t1);font-weight:500">${esc(l.action||'')}</td>
+                <td style="padding:.28rem .5rem;color:var(--t2);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(l.detail||'')}">${esc(l.detail||'')}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.ville,l.pays].filter(Boolean).map(x=>esc(x)).join(', ')||'—'}</td>
+                <td style="padding:.28rem .5rem;color:var(--t3);white-space:nowrap">${[l.navigateur,l.os,l.appareil].filter(Boolean).map(x=>esc(x)).join(' · ')||'—'}</td>
+              </tr>`).join('')||'<tr><td colspan="6" style="color:var(--t3);padding:.5rem">Aucune entrée.</td></tr>'}
               </tbody>
             </table>
           </div>
         </div>
       </div>`;
-  } catch(e){ mc.innerHTML=`<div class="empty"><span class="empty-icon">⚠️</span><p>Erreur de chargement : le serveur ne répond pas.</p><p style="color:var(--t3);font-size:.9em">Google Apps Script est parfois lent ou renvoie une page d'erreur passagère.</p><button class="btn btn-primary" onclick="renderAdmin(document.getElementById('mc'))">Réessayer</button></div>`; }
 }
+const _admin=()=>renderAdmin(document.getElementById('mc'));
 
-async function delUser(email){
-  confirm2('Supprimer cet utilisateur',`Supprimer le compte de ${email} ?`, async()=>{
-    const d=await apiPost({action:'delete'},{table:'Utilisateurs',email_target:email});
-    if(d.success){ renderAdmin(document.getElementById('mc')); toast('Utilisateur supprimé.','🗑️'); }
-    else toast(d.error||'Erreur.','❌');
+async function delUser(id,email){
+  confirm2('Supprimer ce compte',`Supprimer définitivement le compte de ${email} ? Ses projets sont conservés. Pour seulement couper l'accès, préférez « Désactiver ».`, async()=>{
+    const mdp=await demanderMotDePasse('Supprimer un compte',`Confirmez la suppression du compte ${email} avec votre propre mot de passe.`);
+    if(!mdp) return;
+    try {
+      const d=await api('admin/comptes',{methode:'DELETE', corps:{id, motDePasse:mdp}});
+      toast(d.message||'Compte supprimé.','🗑️'); _admin();
+    } catch(e){ toast(apiErrText(e),'❌'); }
   });
 }
 async function addUser(){
   const btn=event&&event.target;
   if(!setBusy(btn)) return;
-  const pnEl=document.getElementById('nu-pn');
-  const nmEl=document.getElementById('nu-nm');
-  const emEl=document.getElementById('nu-em');
-  const roEl=document.getElementById('nu-ro');
-  if(!pnEl||!nmEl||!emEl||!roEl){ toast('Formulaire introuvable.','❌'); clearBusy(); return; }
-  const pn=pnEl.value.trim();
-  const nm=nmEl.value.trim().toUpperCase();
-  const em=emEl.value.trim().toLowerCase();
-  const ro=roEl.value||'enseignant';
+  const pn=v('nu-pn'), nm=v('nu-nm').toUpperCase(), em=v('nu-em').toLowerCase().replace(/\s+/g,'');
+  const ro=v('nu-ro')||'enseignant', lien=!!document.getElementById('nu-lien')?.checked;
   if(!pn||!nm||!em){ toast('Prénom, nom et email sont obligatoires.','⚠️'); clearBusy(); return; }
   if(!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); clearBusy(); return; }
   try {
-    const d=await apiPost({action:'add',table:'Utilisateurs'},{Email:em,Role:ro,Nom:nm,Prenom:pn});
-    if(d.success){ pnEl.value=''; nmEl.value=''; emEl.value=''; renderAdmin(document.getElementById('mc')); toast('Utilisateur créé ! Mdp : '+esc(d.generated_password),'✅'); }
-    else toast(d.error||'Erreur lors de la création.','❌');
-  } finally { clearBusy(); }
+    const d=await api('admin/comptes',{methode:'POST', corps:{email:em, role:ro, nom:nm, prenom:pn, envoyer_lien:lien}});
+    toast(d.message||'Compte créé.','✅');
+    if(lien && !d.lien_envoye) setTimeout(()=>toast("Le lien n'a pas pu partir : renvoyez-le plus tard avec 🔑.",'⚠️'),3500);
+    _admin();
+  } catch(e){ toast(apiErrText(e),'❌'); }
+  finally { clearBusy(); }
 }
-/* Désactiver conserve la ligne et les projets de la personne : seul l'accès est coupé.
-   La suppression (✕) reste possible mais est définitive. */
-async function setUserActive(email,actif){
+/* Désactiver conserve le compte et les projets de la personne : seul l'accès est coupé,
+   dès sa requête suivante. */
+async function setUserActive(id,email,actif){
   const titre=actif?'Réactiver ce compte':'Désactiver ce compte';
   const msg=actif
-    ? email+' pourra de nouveau se connecter avec ses identifiants.'
+    ? email+' pourra de nouveau se connecter.'
     : email+' ne pourra plus se connecter ni modifier de projet. Ses projets sont conservés et restent consultables. Réversible à tout moment.';
   confirm2(titre,msg,async()=>{
     try {
-      const d=await apiPost({action:'set-user-active'},{email,actif:actif?'1':'0'});
-      if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Fait.',actif?'✅':'⛔'); }
-      else toast(d.error||'Erreur.','❌');
-    } catch(e){ toast('Erreur réseau.','❌'); }
+      const d=await api('admin/comptes',{methode:'PATCH', corps:{id, actif:!!actif}});
+      toast(d.message||'Fait.',actif?'✅':'⛔'); _admin();
+    } catch(e){ toast(apiErrText(e),'❌'); }
   },{okLabel:actif?'Réactiver':'Désactiver', okStyle:actif?'primary':'danger'});
 }
-
-async function adminResetPwd(email){
-  confirm2('Réinitialiser le mot de passe','Un nouveau mot de passe sera généré et envoyé par email à '+email+'.', async()=>{
-    const d=await apiPost({action:'admin-reset-password'},{email});
-    if(d.success){ renderAdmin(document.getElementById('mc')); toast(d.message||'Mot de passe réinitialisé.','🔑'); }
-    else toast(d.error||'Erreur.','❌');
-  }, {okLabel:'Réinitialiser', okStyle:'primary'});
+async function envoyerLienCompte(id,email){
+  confirm2('Envoyer un lien',`${email} va recevoir un lien pour choisir son mot de passe, valable 24 heures. Son mot de passe actuel, s'il en a un, reste valable jusque-là.`, async()=>{
+    try {
+      const d=await api('admin/comptes',{methode:'PATCH', corps:{id, envoyer_lien:true}});
+      toast(d.lien_envoye?'Lien envoyé à '+email+'.':(d.message||"Le lien n'a pas pu partir."), d.lien_envoye?'📨':'⚠️');
+    } catch(e){ toast(apiErrText(e),'❌'); }
+  },{okLabel:'Envoyer', okStyle:'primary'});
 }
-async function changeRole(email, sel){
-  const newRole=sel.value;
-  const d=await apiPost({action:'change-role'},{email,role:newRole});
-  if(d.success){ toast('Rôle modifié → '+newRole,'✅'); renderAdmin(document.getElementById('mc')); }
-  else{ toast(d.error||'Erreur.','❌'); renderAdmin(document.getElementById('mc')); }
-}
-async function addEmail(){
-  const btn=event&&event.target;
-  if(!setBusy(btn)) return;
-  const inp=document.getElementById('new-em'), em=inp.value.trim().toLowerCase();
-  if(!em||!em.endsWith('@egd.mg')){ toast('Email @egd.mg requis.','⚠️'); clearBusy(); return; }
+async function changeRole(id, sel){
+  const role=sel.value;
+  const mdp=await demanderMotDePasse('Changer un rôle',`Confirmez avec votre propre mot de passe le passage de ce compte en « ${ROLE_L[role]||role} ».`);
+  if(!mdp){ _admin(); return; }
   try {
-    const d=await apiPost({action:'add-email'},{email:em});
-    if(d.success){ inp.value=''; renderAdmin(document.getElementById('mc')); toast('Email autorisé ajouté.','✅'); }
-    else toast(d.error||'Erreur.','❌');
-  } finally { clearBusy(); }
-}
-async function delEmail(email){
-  confirm2('Retirer cet email',`Retirer ${email} des emails autorisés ?`, async()=>{
-    const d=await apiPost({action:'delete-email'},{target:email});
-    if(d.success){ renderAdmin(document.getElementById('mc')); toast('Email retiré.','🗑️'); }
-    else toast(d.error||'Erreur.','❌');
-  });
+    await api('admin/comptes',{methode:'PATCH', corps:{id, role, motDePasse:mdp}});
+    toast('Rôle modifié : '+(ROLE_L[role]||role)+'.','✅');
+  } catch(e){ toast(apiErrText(e),'❌'); }
+  _admin();
 }
 
 /* TUTORIEL */
 function renderTutoriel(mc){
   mc.innerHTML=`
     <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-book-open-text" style="vertical-align:middle;margin-right:.3rem"></i> Aide &amp; Tutoriels</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
-    <div class="info-card"><h2>Créer un compte</h2><ul>
-      <li>Demandez à l'administrateur d'autoriser votre adresse @egd.mg</li>
-      <li>Cliquez sur <strong><i class="ph-bold ph-sign-in"></i> Connexion</strong> → <em>Créer un compte</em></li>
-      <li>Renseignez vos prénom, nom et email — un mot de passe provisoire sera généré automatiquement</li>
-      <li><strong>Notez bien</strong> ce mot de passe provisoire, il ne sera affiché qu'une seule fois</li>
-      <li>Lors de votre première connexion, vous serez invité(e) à choisir un mot de passe personnel (min. 8 car., 1 majuscule, 1 minuscule, 1 chiffre)</li>
+    <div class="info-card"><h2>Première connexion</h2><ul>
+      <li>Votre compte est créé par l'administrateur à partir de votre adresse @egd.mg</li>
+      <li>Cliquez sur <strong><i class="ph-bold ph-sign-in"></i> Connexion</strong> → <em>Première connexion</em>, puis saisissez votre adresse</li>
+      <li>Vous recevez un lien, valable 24 heures, pour choisir votre mot de passe : vous êtes alors connecté(e)</li>
+      <li>Mot de passe : 12 caractères au moins. Une phrase de passe de plusieurs mots est la solution la plus simple</li>
+      <li>Personne d'autre que vous ne connaît votre mot de passe, pas même l'administrateur</li>
     </ul></div>
     <div class="info-card"><h2>Ajouter un projet</h2><ul>
       <li>Connectez-vous à votre compte</li>
@@ -3752,15 +3759,16 @@ function renderTutoriel(mc){
       <li>Le statut est calculé automatiquement selon les dates</li>
     </ul></div>
     <div class="info-card"><h2>Droits d'accès</h2><ul>
-      <li><strong>Enseignant :</strong> crée et modifie ses propres projets · peut demander la suppression de son compte</li>
-      <li><strong>Vie scolaire :</strong> crée, modifie et supprime les projets de la catégorie « Clubs et activités » uniquement</li>
-      <li><strong>Direction :</strong> crée, modifie et supprime tous les projets</li>
-      <li><strong>Administrateur :</strong> accès complet — projets, comptes utilisateurs, emails autorisés, journal d'activité</li>
+      <li><strong>Enseignant :</strong> crée des projets, modifie ceux qu'il a créés ou dont il est référent · peut demander la suppression de son compte</li>
+      <li><strong>Vie scolaire :</strong> crée, modifie et supprime les projets « Clubs et activités » et « Projets de l'Internat »</li>
+      <li><strong>Direction :</strong> crée, modifie, verrouille et supprime tous les projets · prépare l'année suivante</li>
+      <li><strong>Administrateur :</strong> accès complet : projets, comptes, journal d'activité</li>
+      <li>Un projet verrouillé par la direction ne se modifie plus que par elle</li>
     </ul></div>
     <div class="info-card"><h2>Mot de passe oublié</h2><ul>
       <li>Cliquez sur <strong><i class="ph-bold ph-sign-in"></i> Connexion</strong> → <em>Mot de passe oublié ?</em></li>
       <li>Renseignez votre adresse @egd.mg</li>
-      <li>Vous recevrez un lien de réinitialisation valable 24 heures</li>
+      <li>Vous recevrez un lien valable 24 heures pour choisir un nouveau mot de passe</li>
     </ul></div>`;
 }
 
@@ -3769,9 +3777,9 @@ function renderMentions(mc){
   mc.innerHTML=`
     <div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-scales" style="vertical-align:middle;margin-right:.3rem"></i> Mentions légales</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>
     <div class="info-card"><h2>Éditeur</h2><p>Lycée Français de Tananarive (LFT) · Établissement en gestion directe de l'AEFE · Antananarivo, Madagascar</p></div>
-    <div class="info-card"><h2>Hébergement</h2><p>GitHub Pages (GitHub, Inc.) · Base de données : Google Sheets &amp; Apps Script (Google LLC)</p></div>
+    <div class="info-card"><h2>Hébergement</h2><p>Site et fonctions serveur : Vercel Inc. (exécution à Francfort) · Base de données et authentification : Supabase Inc. (région Francfort, Union européenne)</p></div>
     <div class="info-card"><h2>Données personnelles (RGPD)</h2>
-      <p>Données collectées : nom, prénom, email @egd.mg (authentification). Données techniques de connexion (fuseau horaire, système d'exploitation, navigateur) : journalisées à des fins de sécurité et d'audit, accessibles uniquement aux administrateurs. Aucune géolocalisation précise ni adresse IP n'est collectée. Données non transmises à des tiers. Droit d'accès et de suppression : contactez l'administrateur.</p></div>
+      <p>Données collectées : nom, prénom, adresse @egd.mg et rôle (authentification et droits). Les mots de passe ne sont jamais conservés en clair. Pour la sécurité et l'audit, le journal d'activité enregistre les actions, avec le pays et la ville approximatifs déduits de la connexion, le système et le navigateur ; l'adresse IP n'est pas conservée. Le journal n'est consultable que par l'administrateur. Un cookie de session strictement nécessaire est déposé à la connexion ; il expire au plus tard huit heures après. Données non transmises à des tiers. Droit d'accès, de rectification et de suppression : contactez l'administrateur, ou utilisez « Supprimer mon compte ».</p></div>
     <div class="info-card"><h2>Propriété intellectuelle</h2>
       <p>Contenus et logo propriété du LFT et de l'AEFE. Toute reproduction interdite sans autorisation préalable.</p></div>`;
 }
@@ -3816,32 +3824,10 @@ function renderCurrent(){
 /* ═══════════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════════ */
-async function init(){
-  loadSession(); updateHeader();
-  document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement des projets…</div>`;
-  setBc([]);
-  // Année scolaire : calcul local + liste des années disponibles côté serveur
-  S.currentYear = currentSchoolYear();
-  const params=new URLSearchParams(window.location.search);
-  const askedYear = params.get('annee');           // lien partagé d'archive : ?annee=2024-2025
-  S.year = askedYear || S.currentYear;
-  S.months = schoolMonthsFor(S.year);
-  await loadYears();
-  // askedYear peut être absente de la liste serveur : on retombe sur l'année courante
-  if(askedYear && S.years.indexOf(askedYear)<0){ S.year=S.currentYear; S.months=schoolMonthsFor(S.year); }
-  renderYearSelector();
-  await loadProjects();
-  await loadTrashCount();
-  // Détecter un token de réinitialisation dans l'URL (?reset=TOKEN)
-  const resetToken=params.get('reset');
-  if(resetToken){
-    // On retire le jeton de l'URL mais on conserve l'année consultée
-    window.history.replaceState({},document.title,window.location.pathname+yearQuery());
-    openResetForm(resetToken);
-  }
-  // Routage initial : respecter le hash dans l'URL (liens partagés).
-  // L'année est réinjectée dans l'URL et dans l'état, sinon un rafraîchissement ou un
-  // retour navigateur ramènerait l'utilisateur sur l'année courante.
+/* Routage initial : respecter le hash de l'adresse (liens partagés). L'année est
+   réinjectée dans l'adresse et dans l'état, sinon un rafraîchissement ou un retour
+   navigateur ramènerait l'utilisateur sur l'année courante. */
+function routeInitiale(){
   const base=window.location.pathname+yearQuery();
   const hash=window.location.hash;
   if(hash.startsWith('#/detail/')){
@@ -3849,7 +3835,7 @@ async function init(){
     const p=S.projects.find(x=>x.ID_Projet===id);
     if(p){ S.page='detail'; S.sel=p; setBc([{l:p.Categorie,fn:`goCategory('${jsq(p.Categorie)}')`},{l:p.Nom_Projet}]); history.replaceState({page:'detail',filter:null,selId:id,year:S.year},'',base+hash); renderDetail(p); }
     else {
-      history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
+      S.page='dashboard'; history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
       toast('Projet introuvable dans l\'année '+S.year+'. Essayez une autre année scolaire.','🔎');
     }
   } else if(hash.startsWith('#/cat/')){
@@ -3861,8 +3847,47 @@ async function init(){
     const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
     setBc([{l:labels[fv]||'Projets'}]); history.replaceState({page:'filtered',filter:fv,selId:null,year:S.year},'',base+hash); renderFilteredPage(fv);
   } else {
-    history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
+    S.page='dashboard'; history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
   }
+}
+
+/* Ouverture de la page.
+   1. Tout ce qui est connu de l'appareil s'affiche AUSSITÔT (dernière liste, années,
+      nom de la personne connectée) : pas d'écran d'attente pour qui est déjà venu.
+   2. En parallèle, le serveur est interrogé ; la page n'est redessinée que si la liste
+      a changé. */
+async function init(){
+  loadSession(); updateHeader(); setBc([]);
+  S.currentYear = currentSchoolYear();
+  const params=new URLSearchParams(window.location.search);
+  const askedYear = params.get('annee');           // lien partagé d'archive : ?annee=2024-2025
+  // Lien reçu par courriel (« Première connexion », « Mot de passe oublié ») : ?jeton=...
+  // Le jeton est retiré de l'adresse aussitôt (historique, partage d'écran).
+  const jeton=params.get('jeton');
+  appliquerAnnees(lireCache(CLE_ANNEES));
+  S.year = askedYear || S.currentYear;
+  S.months = schoolMonthsFor(S.year);
+  if(jeton) history.replaceState({},document.title,window.location.pathname+yearQuery()+window.location.hash);
+  renderYearSelector();
+
+  const c=lireCache(CLE_LISTE+S.year);
+  const dejaAffiche = !!(c && Array.isArray(c.projets));
+  if(dejaAffiche){ appliquerListe(c); routeInitiale(); }
+  else document.getElementById('mc').innerHTML=`<div class="loader"><div class="spin"></div> Chargement des projets…</div>`;
+  if(jeton) openResetForm(jeton);
+
+  const avant=_signature, etatAvant=JSON.stringify([S.user,S.trashCount]);
+  await Promise.all([loadYears(), loadProjects(), chargerMoi()]);
+  updateHeader();
+  // Année demandée inconnue du serveur : retour sur l'année courante
+  if(askedYear && S.years.indexOf(askedYear)<0){
+    S.year=S.currentYear; S.months=schoolMonthsFor(S.year); await loadProjects();
+  }
+  renderYearSelector();
+  await loadTrashCount();
+  if(!dejaAffiche || S.year!==(askedYear||S.year)) routeInitiale();
+  else if(_signature!==avant || S.loadError || S.horsLigne || JSON.stringify([S.user,S.trashCount])!==etatAvant) rafraichirVue();
+  else updateArchiveBar();
 }
 init();
 </script>
