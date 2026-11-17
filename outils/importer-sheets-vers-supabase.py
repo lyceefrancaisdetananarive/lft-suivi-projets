@@ -62,6 +62,10 @@ ENV = os.path.expanduser("~/.config/lft/suivi-supabase.env")
 RAPPORT_DIR = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-Personnel/Documents/"
     "Projets d'établissement -- Lycée Français de Tananarive/Refonte-suivi-2026")
+# Rattachements de référents confirmés à la main (nom cité sans prénom, faute
+# de frappe). Une ligne par rattachement : annee<TAB>code<TAB>email. Hors dépôt,
+# puisqu'il nomme des collègues.
+CONFIRMES = os.path.join(RAPPORT_DIR, "referents-confirmes.tsv")
 
 TZ = datetime.timezone(datetime.timedelta(hours=3))  # Antananarivo, sans heure d'été
 MAINTENANT = datetime.datetime.now(TZ)
@@ -338,13 +342,29 @@ def preparer(data):
     #     L'ancienne règle (isReferentOf, par sous-chaîne) sert à repérer ce
     #     qu'elle accordait en plus : listé « à vérifier », non importé.
     referents, a_verifier, non_rattaches = [], [], []
+    confirmes = set()
+    if os.path.exists(CONFIRMES):
+        for n, ligne in enumerate(open(CONFIRMES, encoding="utf-8"), 1):
+            ligne = ligne.split("#", 1)[0].strip()
+            if not ligne:
+                continue
+            champs = [c.strip() for c in ligne.split("\t")]
+            if len(champs) != 3:
+                alertes.append("referents-confirmes.tsv ligne %d illisible, ignorée" % n)
+                continue
+            a_, c_, e_ = champs[0], champs[1], champs[2].lower()
+            if (a_, c_) not in cles or e_ not in par_email:
+                alertes.append("referents-confirmes.tsv ligne %d : projet ou compte inconnu, ignorée" % n)
+                continue
+            confirmes.add((a_, c_, e_))
     for p in projets:
         t = p["referents"]
+        trouves = [m for m in membres if (p["annee"], p["code"], m["email"]) in confirmes]
+        referents.extend(((p["annee"], p["code"]), m["email"]) for m in trouves)
         if not t:
             continue
         mt = set(mots(t))
         ref_n = norm(t)
-        trouves = []
         for m in membres:
             nom_m, pre_m = mots(m["nom"]), mots(m["prenom"])
             if not nom_m:
@@ -357,6 +377,8 @@ def preparer(data):
             if ancien:
                 pn = norm(m["prenom"])
                 ancien = (pn in ref_n) if len(pn) >= 2 else True
+            if m in trouves:
+                continue
             if sur:
                 trouves.append(m)
                 referents.append(((p["annee"], p["code"]), m["email"]))
