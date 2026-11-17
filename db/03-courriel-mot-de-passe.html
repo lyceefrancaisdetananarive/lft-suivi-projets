@@ -1,0 +1,82 @@
+<!--
+  GABARIT DU COURRIEL "CHOISIR VOTRE MOT DE PASSE" DU SUIVI DES PROJETS.
+
+  COPIE DE REFERENCE. L'original vit dans le tableau de bord Supabase du
+  projet Suivi_Projets_LFT : Authentication > Emails > Templates > Reset
+  password, objet :
+      Projets et parcours LFT : choisir votre mot de passe
+  Si le gabarit y est remis a zero (desactiver le relais SMTP le fait), le
+  recoller depuis ici, a partir de la ligne <div lang, sans ce commentaire.
+
+  Repris du gabarit du classeur de Technologie (06_SITE_V2/db/), adapte aux
+  personnels :
+  - Le lien porte le hachage du jeton APRES UN DIESE : le fragment n'est
+    jamais envoye au serveur (ni journaux Vercel, ni en-tete Referer). La
+    page le lit, le retire de l'adresse, et ne le presente a Supabase
+    qu'au moment ou la personne enregistre son mot de passe
+    (api/auth/mot-de-passe.js). Ne pas revenir a la variable
+    ConfirmationURL : ce lien-la est consomme au premier clic, parfois par
+    l'antivirus de la messagerie, avant que la personne ait rien fait.
+  - Ne jamais ecrire une variable entre doubles accolades dans ce
+    commentaire : le moteur de gabarit l'interpolerait.
+  - Fichier integralement ASCII, accents en entites HTML : coller du texte
+    accentue dans l'editeur Supabase depuis le navigateur abime l'UTF-8.
+  - Regle du mot de passe identique a api/_lib/motdepasse.js (12 caracteres
+    au moins, phrase de passe encouragee, aucune composition imposee).
+  - Accessibilite (RGAA) : texte reel, contrastes AA, corps 16 px, bouton
+    de 44 px de haut au moins, tableaux en role="presentation".
+  - Hameconnage : l'adresse attendue est ecrite en clair, le courriel
+    rappelle que personne ne demande un mot de passe, et dit quoi faire
+    quand on n'a rien demande.
+-->
+<div lang="fr">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Votre lien pour choisir le mot de passe du suivi des projets du lyc&eacute;e. Valable 24 heures.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F7;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;padding:32px 28px;">
+
+<tr><td align="center" style="padding-bottom:10px;"><img src="{{ .SiteURL }}/logo-lft.jpg" width="76" height="76" alt="" style="display:block;border:0;width:76px;height:76px;border-radius:50%;"></td></tr>
+<tr><td align="center" style="font-size:19px;font-weight:bold;color:#004E8C;padding-bottom:2px;">Projets et parcours</td></tr>
+<tr><td align="center" style="font-size:13px;color:#4B5563;padding-bottom:26px;">Lyc&eacute;e Fran&ccedil;ais de Tananarive</td></tr>
+
+<tr><td style="font-size:21px;font-weight:bold;line-height:1.3;color:#1F2A37;padding-bottom:14px;">Choisir votre mot de passe</td></tr>
+<tr><td style="font-size:16px;line-height:1.6;color:#1F2A37;">Bonjour,</td></tr>
+<tr><td style="font-size:16px;line-height:1.6;color:#1F2A37;padding-top:12px;">Ce message vous permet de choisir le mot de passe de votre compte sur le suivi des projets de l&rsquo;&eacute;tablissement. Vous serez connect&eacute;(e) d&egrave;s qu&rsquo;il sera enregistr&eacute;.</td></tr>
+
+<tr><td align="center" style="padding:26px 0 14px;"><a href="{{ .SiteURL }}/#jeton={{ .TokenHash }}" style="display:inline-block;background:#004E8C;color:#ffffff;text-decoration:none;font-size:17px;font-weight:bold;line-height:1.2;padding:16px 32px;border-radius:8px;">Choisir mon mot de passe</a></td></tr>
+<tr><td align="center" style="font-size:13px;line-height:1.6;color:#4B5563;padding-bottom:22px;word-break:break-all;overflow-wrap:anywhere;">Le bouton ouvre le site du lyc&eacute;e, &agrave; l&rsquo;adresse <strong style="color:#1F2A37;">{{ .SiteURL }}</strong>.<br>V&eacute;rifiez cette adresse en haut du navigateur avant de taper votre mot de passe.</td></tr>
+
+<tr><td style="background:#E4EFF9;border-left:5px solid #004E8C;border-radius:0 8px 8px 0;padding:16px 18px;">
+<p style="margin:0 0 8px;font-size:16px;font-weight:bold;color:#1F2A37;">Comment choisir un bon mot de passe</p>
+<ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65;color:#1F2A37;">
+<li>Au moins <strong>12 caract&egrave;res</strong>. Le plus simple&nbsp;: trois ou quatre mots qui n&rsquo;ont rien &agrave; voir entre eux, s&eacute;par&eacute;s par des espaces ou des tirets.</li>
+<li>Par exemple &laquo;&nbsp;baobab-tonnerre-vanille&nbsp;&raquo;. N&rsquo;utilisez pas cet exemple&nbsp;: inventez le v&ocirc;tre, il se retiendra tout seul.</li>
+<li>N&rsquo;y mettez ni votre nom, ni votre pr&eacute;nom, ni votre adresse.</li>
+<li>Ne reprenez pas un mot de passe que vous utilisez d&eacute;j&agrave; ailleurs, en particulier celui de votre messagerie.</li>
+</ul>
+</td></tr>
+
+<tr><td style="padding-top:22px;">
+<p style="margin:0 0 8px;font-size:16px;font-weight:bold;color:#1F2A37;">Bon &agrave; savoir</p>
+<ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65;color:#4B5563;">
+<li>Ce lien ne sert qu&rsquo;une fois et il s&rsquo;arr&ecirc;te de fonctionner au bout de <strong style="color:#1F2A37;">24&nbsp;heures</strong>.</li>
+<li>S&rsquo;il ne marche plus, ouvrez le site, cliquez sur &laquo;&nbsp;Connexion&nbsp;&raquo; puis sur &laquo;&nbsp;Premi&egrave;re connexion&nbsp;&raquo;&nbsp;: un nouveau message vous sera envoy&eacute;.</li>
+<li>Personne au lyc&eacute;e ne vous demandera jamais votre mot de passe, ni par courriel, ni de vive voix, pas m&ecirc;me l&rsquo;administrateur du site.</li>
+<li>Si vous n&rsquo;avez rien demand&eacute;, ignorez ce message&nbsp;: rien n&rsquo;est modifi&eacute;.</li>
+</ul>
+</td></tr>
+
+<tr><td style="font-size:13px;line-height:1.6;color:#4B5563;padding-top:22px;word-break:break-all;overflow-wrap:anywhere;">Si le bouton ne r&eacute;agit pas, copiez cette adresse dans la barre de votre navigateur&nbsp;:<br><span style="word-break:break-all;overflow-wrap:anywhere;color:#1F2A37;">{{ .SiteURL }}/#jeton={{ .TokenHash }}</span></td></tr>
+
+<tr><td style="font-size:13px;line-height:1.7;color:#4B5563;padding-top:24px;border-top:1px solid #D7DEE5;">
+Message automatique&nbsp;: personne ne lit les r&eacute;ponses envoy&eacute;es &agrave; cette adresse. Une question, une difficult&eacute; pour vous connecter&nbsp;? Adressez-vous &agrave; l&rsquo;administrateur du suivi des projets.
+<br><br>
+Suivi des projets du Lyc&eacute;e Fran&ccedil;ais de Tananarive, Ambatobe, Antananarivo, Madagascar. &Eacute;tablissement en gestion directe de l&rsquo;AEFE.
+<br>
+<a href="{{ .SiteURL }}/#/mentions" style="color:#004E8C;">Mentions l&eacute;gales et donn&eacute;es personnelles</a>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</div>

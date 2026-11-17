@@ -6,6 +6,7 @@ import { journaliser } from '../_lib/journal.js';
 import {
   lire, lireTout, ecrire, creerUtilisateur, utilisateurParEmail, supprimerUtilisateur,
   verifierMotDePasse, adminsAutorises, configuree, origineLegitime, refus, corps, UUID,
+  MESSAGE_SATURATION,
 } from '../_lib/supabase.js';
 
 // La gestion des comptes, par l'administrateur seul.
@@ -27,11 +28,11 @@ import {
 const ROLES_PERSONNEL = ['admin', 'direction', 'vie_scolaire', 'enseignant'];
 const EMAIL = /^[a-z0-9._%+-]+@egd\.mg$/;
 
-async function ressaisie(m, motDePasse) {
+async function ressaisie(req, m, motDePasse) {
   if (!(await ressaisieAutorisee(m.id))) {
     return `Trop d'essais. Réessayez dans ${FENETRE_MINUTES} minutes.`;
   }
-  if (!motDePasse || !(await verifierMotDePasse(m.email, String(motDePasse)))) {
+  if (!motDePasse || !(await verifierMotDePasse(m.email, String(motDePasse), req))) {
     await noterEchecRessaisie(m.id);
     return 'Mot de passe incorrect : confirmez avec votre propre mot de passe.';
   }
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
     // ---------------------------------------------------------- suppression
     if (req.method === 'DELETE') {
       if (cible.id === m.id) return refus(res, 400, 'Vous ne pouvez pas supprimer votre propre compte.');
-      const motif = await ressaisie(m, b.motDePasse);
+      const motif = await ressaisie(req, m, b.motDePasse);
       if (motif) return refus(res, 401, motif);
       // Les projets restent : leur auteur devient vide, son nom reste affiché.
       if (!(await supprimerUtilisateur(cible.id))) return refus(res, 500, "La suppression n'a pas abouti.");
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
         return refus(res, 403, "Cette adresse ne figure pas dans la liste ADMINS_SUIVI du projet "
           + "Vercel : elle ne peut pas recevoir le rôle admin.");
       }
-      const motif = await ressaisie(m, b.motDePasse);
+      const motif = await ressaisie(req, m, b.motDePasse);
       if (motif) return refus(res, 401, motif);
       maj.role = role;
       traces.push(['change_role', `${cible.email}: ${cible.role} -> ${role}`]);
@@ -163,6 +164,7 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('admin/comptes :', e.message);
+    if (e.statut === 429) return refus(res, 429, MESSAGE_SATURATION);
     refus(res, 500, "L'opération n'a pas abouti. Réessayez dans un instant.");
   }
 }

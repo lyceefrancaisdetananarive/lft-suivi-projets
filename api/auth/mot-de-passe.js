@@ -7,6 +7,7 @@ import { journaliser } from '../_lib/journal.js';
 import {
   definirMotDePasse, verifierMotDePasse, utilisateurDuJetonHache, lire, ecrire,
   configuree, origineLegitime, refus, corps,
+  MESSAGE_SATURATION,
 } from '../_lib/supabase.js';
 
 // =====================================================================
@@ -41,7 +42,7 @@ export default async function handler(req, res) {
       // passe refusé ne doit pas griller le lien.
       const prealable = refuserMotDePasse(nouveau);
       if (prealable) return refus(res, 400, prealable);
-      const porteur = await utilisateurDuJetonHache(jeton);
+      const porteur = await utilisateurDuJetonHache(jeton, req);
       if (!porteur) {
         return refus(res, 401, "Ce lien n'est plus valable : il expire au bout de 24 heures "
           + "et ne sert qu'une fois. Demandez-en un nouveau avec « Mot de passe oublié ».");
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
       if (!(await ressaisieAutorisee(m.id))) {
         return refus(res, 429, `Trop d'essais. Réessayez dans ${FENETRE_MINUTES} minutes.`);
       }
-      if (!(await verifierMotDePasse(m.email, ancien))) {
+      if (!(await verifierMotDePasse(m.email, ancien, req))) {
         await noterEchecRessaisie(m.id);
         return refus(res, 401, 'Le mot de passe actuel est incorrect.');
       }
@@ -92,6 +93,7 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, role: m.role, prenom: m.prenom, nom: m.nom, email: m.email });
   } catch (e) {
     console.error('mot-de-passe :', e.message);
+    if (e.statut === 429) return refus(res, 429, MESSAGE_SATURATION);
     refus(res, 500, "Le changement n'a pas abouti. Réessayez ; si cela persiste, "
       + "demandez un nouveau lien avec « Mot de passe oublié ».");
   }

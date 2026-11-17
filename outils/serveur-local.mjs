@@ -56,7 +56,7 @@ globalThis.fetch = async (url, opts) => {
     });
     const d = await r.json();
     const jeton = d.hashed_token || d.properties?.hashed_token;
-    console.log(`[courriel] lien pour ${email} : http://localhost:${PORT}/?jeton=${jeton}`);
+    console.log(`[courriel] lien pour ${email} : http://localhost:${PORT}/#jeton=${jeton}`);
     return new Response('{}', { status: 200 });
   }
   return fetchReel(url, opts);

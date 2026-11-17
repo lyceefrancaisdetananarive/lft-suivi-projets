@@ -20,7 +20,7 @@ export async function envoyerLienSiPossible(req, email, auteur = null) {
     `membre_id=eq.${m.id}&origine=eq.oubli&quand=gte.${depuis}&select=id&limit=1`).catch(() => []);
   if (recentes.length) return { envoye: false, raison: 'recent' };
 
-  const statut = await envoyerLien(m.email, `https://${req.headers.host}`);
+  const statut = await envoyerLien(m.email, `https://${req.headers.host}`, req);
   if (statut < 200 || statut >= 300) {
     console.error('lien : /auth/v1/recover a répondu', statut);
     return { envoye: false, raison: `supabase ${statut}` };

@@ -18,7 +18,9 @@
 //   ADMINS_SUIVI          adresses autorisées à porter le rôle admin
 // =====================================================================
 
-const URL_BASE = () => String(process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+import { isIP } from 'node:net';
+
+const URL_BASE = () =>String(process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const CLE = () => process.env.SUPABASE_SECRET_KEY;
 
 export function configuree() {
@@ -94,13 +96,49 @@ export async function ecrire(table, requete, corps, methode = 'PATCH', prefer = 
 
 // ------------------------------------------------------------- comptes
 
+// LIMITES DE SUPABASE AUTH PAR ADRESSE IP. Toutes les demandes partent des
+// serveurs de Vercel : sans précaution, Supabase compterait l'école entière
+// sur une seule adresse (30 connexions par 5 minutes) et refuserait des
+// collègues lors d'une réunion. On lui transmet donc l'adresse réelle de la
+// personne dans l'en-tête Sb-Forwarded-For, qu'il n'accepte qu'avec une clé
+// secrète sb_secret_ et l'option « IP address forwarding » activée
+// (Authentication > Rate Limits). Vercel écrit lui-même x-real-ip et écrase
+// ce que le navigateur prétendrait y mettre : l'adresse n'est pas falsifiable.
+// Le lycée sortant sur une seule adresse publique, les plafonds par IP sont en
+// outre relevés dans Supabase ; la protection contre les essais répétés reste
+// celle de connexion.js, compte par compte.
+function adresseClient(req) {
+  const brute = String(req?.headers?.['x-real-ip']
+    ?? String(req?.headers?.['x-forwarded-for'] ?? '').split(',')[0]).trim();
+  return isIP(brute) ? brute : null;
+}
+
+function entetesAuth(req) {
+  const ip = adresseClient(req);
+  return entetes(ip ? { 'sb-forwarded-for': ip } : {}, false);
+}
+
+// Un 429 de Supabase veut dire « trop de demandes », pas « mot de passe faux »
+// ni « lien périmé » : le confondre noterait un échec à tort, jusqu'à mettre un
+// compte en pause. On le remonte en erreur, que les fonctions traduisent.
+function saturation() {
+  const e = new Error('Supabase Auth : trop de demandes (429)');
+  e.statut = 429;
+  return e;
+}
+
+/** Message à afficher quand Supabase Auth répond 429. */
+export const MESSAGE_SATURATION = 'Beaucoup de connexions en même temps sur le site. '
+  + 'Patientez une minute, puis réessayez.';
+
 /** Vérifie une paire adresse / mot de passe. Renvoie l'id, ou null. */
-export async function verifierMotDePasse(email, motDePasse) {
+export async function verifierMotDePasse(email, motDePasse, req) {
   const r = await fetch(`${URL_BASE()}/auth/v1/token?grant_type=password`, {
     method: 'POST',
-    headers: entetes({}, false),
+    headers: entetesAuth(req),
     body: JSON.stringify({ email, password: motDePasse }),
   });
+  if (r.status === 429) throw saturation();
   if (!r.ok) return null;
   const d = await r.json();
   // La vérification ouvre une session Supabase que personne n'utilise : la
@@ -133,12 +171,13 @@ export async function definirMotDePasse(id, motDePasse) {
  * antivirus ou par un aperçu de messagerie reste donc valable (leçon du
  * classeur, 12 septembre 2026). C'est Supabase qui vérifie et périme le jeton.
  */
-export async function utilisateurDuJetonHache(jetonHache) {
+export async function utilisateurDuJetonHache(jetonHache, req) {
   const r = await fetch(`${URL_BASE()}/auth/v1/verify`, {
     method: 'POST',
-    headers: entetes({}, false),
+    headers: entetesAuth(req),
     body: JSON.stringify({ type: 'recovery', token_hash: jetonHache }),
   });
+  if (r.status === 429) throw saturation();
   if (!r.ok) return null;
   const d = await r.json();
   if (!d?.user?.id) return null;
@@ -153,15 +192,16 @@ export async function utilisateurDuJetonHache(jetonHache) {
 
 /**
  * Demande à Supabase le courriel « choisir mon mot de passe ». Le gabarit
- * du courriel (tableau de bord Supabase) mène à {{ .SiteURL }}/?jeton=
- * {{ .TokenHash }}. redirect_to va dans l'URL, jamais dans le corps, où
- * Supabase l'ignorerait sans un mot. Renvoie le statut HTTP de Supabase.
+ * du courriel (tableau de bord Supabase, copie dans db/03) mène à
+ * {{ .SiteURL }}/#jeton={{ .TokenHash }}. redirect_to va dans l'URL, jamais
+ * dans le corps, où Supabase l'ignorerait sans un mot. Renvoie le statut HTTP
+ * de Supabase.
  */
-export async function envoyerLien(email, origine) {
+export async function envoyerLien(email, origine, req) {
   const cible = encodeURIComponent(`${origine}/`);
   const r = await fetch(`${URL_BASE()}/auth/v1/recover?redirect_to=${cible}`, {
     method: 'POST',
-    headers: entetes({}, false),
+    headers: entetesAuth(req),
     body: JSON.stringify({ email }),
   });
   return r.status;

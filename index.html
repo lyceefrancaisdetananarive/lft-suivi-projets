@@ -3846,6 +3846,10 @@ function routeInitiale(){
     const fv=f==='all'?null:f; S.page='filtered'; S.filter=fv;
     const labels={null:'Tous les projets','Planifie':'Projets Planifiés','En cours':'Projets En cours','Termine':'Projets Terminés'};
     setBc([{l:labels[fv]||'Projets'}]); history.replaceState({page:'filtered',filter:fv,selId:null,year:S.year},'',base+hash); renderFilteredPage(fv);
+  } else if(/^#\/(chronologie|etab|clubs|internat|tutoriel|mentions|trash|admin)$/.test(hash)){
+    // Pages fixes (lien « Mentions légales » du courriel, par exemple)
+    _skipPush=true; try { showPage(hash.slice(2)); } finally { _skipPush=false; }
+    history.replaceState({page:S.page,filter:null,selId:null,year:S.year},'',base+hash);
   } else {
     S.page='dashboard'; history.replaceState({page:'dashboard',filter:null,selId:null,year:S.year},'',base); renderDashboard();
   }
@@ -3861,13 +3865,16 @@ async function init(){
   S.currentYear = currentSchoolYear();
   const params=new URLSearchParams(window.location.search);
   const askedYear = params.get('annee');           // lien partagé d'archive : ?annee=2024-2025
-  // Lien reçu par courriel (« Première connexion », « Mot de passe oublié ») : ?jeton=...
-  // Le jeton est retiré de l'adresse aussitôt (historique, partage d'écran).
-  const jeton=params.get('jeton');
+  // Lien reçu par courriel (« Première connexion », « Mot de passe oublié ») : /#jeton=...
+  // Le jeton voyage après le #, qui n'est jamais envoyé au serveur (ni journaux, ni
+  // Referer). ?jeton= reste accepté. Il est retiré de l'adresse aussitôt (historique,
+  // partage d'écran).
+  const fragment=window.location.hash.startsWith('#jeton=')?new URLSearchParams(window.location.hash.slice(1)):null;
+  const jeton=(fragment&&fragment.get('jeton'))||params.get('jeton');
   appliquerAnnees(lireCache(CLE_ANNEES));
   S.year = askedYear || S.currentYear;
   S.months = schoolMonthsFor(S.year);
-  if(jeton) history.replaceState({},document.title,window.location.pathname+yearQuery()+window.location.hash);
+  if(jeton) history.replaceState({},document.title,window.location.pathname+yearQuery()+(fragment?'':window.location.hash));
   renderYearSelector();
 
   const c=lireCache(CLE_LISTE+S.year);
