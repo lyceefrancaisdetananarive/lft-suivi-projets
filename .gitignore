@@ -17,3 +17,7 @@ documents/
 # Claude
 .claude/
 Signature.gs
+
+# Exceptions : configuration du déploiement Vercel (aucun secret)
+!package.json
+!vercel.json

@@ -1,0 +1,7 @@
+{
+  "name": "lft-suivi-projets",
+  "private": true,
+  "type": "module",
+  "description": "Suivi des projets d'établissement du Lycée Français de Tananarive : page unique et fonctions /api/ (Vercel) sur Supabase.",
+  "engines": { "node": "22.x" }
+}
