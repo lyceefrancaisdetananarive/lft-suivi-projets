@@ -159,10 +159,10 @@ export function versPage(p, { origines = new Map(), droits = null } = {}) {
 //  - l'année courante et l'année précédente seulement ;
 //  - ni moyens ni budget (ressources), ni priorité, ni auteur, ni date de
 //    saisie : ce sont des éléments de travail internes ;
-//  - les noms des enseignants référents seulement si VITRINE_NOMS vaut
-//    « oui » dans le projet Vercel. Par défaut, ils ne sortent pas : leur
-//    publication attend l'accord de la direction et l'information des
-//    collègues ;
+//  - les noms des enseignants référents quand VITRINE_NOMS vaut « oui » dans
+//    le projet Vercel. Activé le 18/11/2026 : les collègues ont donné leur
+//    accord à la diffusion, l'outil sert aussi la communication du lycée.
+//    Sans la variable, les noms ne sortent pas (repli prudent) ;
 //  - jamais de nom d'élève : aucune colonne n'en porte. Les textes libres
 //    (description, objectifs) restent sous la responsabilité de leur auteur.
 // ---------------------------------------------------------------------
