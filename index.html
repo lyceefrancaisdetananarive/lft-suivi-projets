@@ -837,7 +837,7 @@ function vueFiche(mc,code){
   const autres=S.projets.filter(x=>x.code!==p.code&&x.categorie===p.categorie).slice(0,3);
   const actions=[];
   if(p.peut_modifier) actions.push(`<a class="btn btn-bleu" href="#/modifier/${encodeURIComponent(p.code)}">Modifier</a>`);
-  if(peutReconduire()) actions.push(`<button class="btn btn-clair" onclick="reconduire('${jsq(p.code)}')">Reconduire en ${esc(cibleReconduction())}</button>`);
+  if(peutReconduire()&&p.peut_reconduire) actions.push(`<button class="btn btn-clair" onclick="reconduire('${jsq(p.code)}')">Reconduire en ${esc(cibleReconduction())}</button>`);
   if(dir&&peutEcrireAnnee()) actions.push(`<button class="btn btn-clair" onclick="basculerPhare('${jsq(p.code)}',this)">${p.phare?'Retirer des projets phares':'Marquer projet phare'}</button>`);
   if(dir&&peutEcrireAnnee()) actions.push(`<button class="btn btn-clair" onclick="basculerVerrou('${jsq(p.code)}',this)">${p.verrouille?'Déverrouiller':'Verrouiller'}</button>`);
   actions.push(`<button class="btn btn-clair" onclick="window.print()">Imprimer ou PDF</button>`);

@@ -27,7 +27,10 @@ import { ouvrir, lireCookie, sceller, poserCookie, DUREE } from './session.js';
 import { lire, ecrire, adminsAutorises } from './supabase.js';
 import { archivee } from './annee.js';
 
-const CHAMPS_MEMBRE = 'id,email,role,actif,mdp_provisoire,prenom,nom';
+const CHAMPS_MEMBRE = 'id,email,role,actif,mdp_provisoire,mdp_pose_le,prenom,nom';
+// Marge entre l'heure du mot de passe (millisecondes) et celle de la session
+// (secondes arrondies) : la session posée juste après le changement reste valable.
+const MARGE_MS = 1500;
 
 /**
  * Qui appelle ? Le compte est RELU EN BASE à chaque appel, jamais pris au
@@ -41,6 +44,10 @@ export async function appelant(req) {
   const m = (await lire('membres', `id=eq.${session.sub}&select=${CHAMPS_MEMBRE}`))[0];
   if (!m || !m.actif || m.mdp_provisoire) return null;
   if (!roleTenable(m)) return null;
+  // Un mot de passe changé ferme les sessions ouvertes avant le changement,
+  // sur tous les appareils (audit du 18/11/2026) : sans cela, un cookie volé
+  // restait valable jusqu'à huit heures malgré le nouveau mot de passe.
+  if (m.mdp_pose_le && session.dep * 1000 < Date.parse(m.mdp_pose_le) - MARGE_MS) return null;
   return m;
 }
 
@@ -82,6 +89,21 @@ export function peutModifier(m, p, estReferent) {
   if (!peutEcrireAnnee(m, p.annee)) return false;
   if (estDirection(m)) return true;
   if (p.verrouille_le) return false;
+  if (m.role === 'vie_scolaire') return CATS_VIE_SCOLAIRE.includes(p.categorie);
+  if (m.role === 'enseignant') return p.cree_par === m.id || Boolean(estReferent);
+  return false;
+}
+
+/**
+ * Peut-il reconduire ce projet vers une autre année ? Direction et
+ * administrateur : tout ; vie scolaire : ses catégories ; enseignant : ses
+ * projets et ceux dont il est référent (audit du 18/11/2026 : avant, toute
+ * personne connectée pouvait copier n'importe quelle fiche à son nom, la
+ * publier sur la vitrine et empêcher son auteur de la reconduire).
+ */
+export function peutReconduire(m, p, estReferent) {
+  if (!m || !p || p.supprime_le || m.role === 'eleve') return false;
+  if (estDirection(m)) return true;
   if (m.role === 'vie_scolaire') return CATS_VIE_SCOLAIRE.includes(p.categorie);
   if (m.role === 'enseignant') return p.cree_par === m.id || Boolean(estReferent);
   return false;

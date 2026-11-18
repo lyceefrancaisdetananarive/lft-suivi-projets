@@ -1,5 +1,5 @@
 import {
-  appelant, peutModifier, peutCreer, referentDe, reArmer, estDirection, nomAffiche,
+  appelant, peutModifier, peutReconduire, peutCreer, referentDe, reArmer, estDirection, nomAffiche,
   CATS_VIE_SCOLAIRE,
 } from '../_lib/autorisation.js';
 import {
@@ -27,7 +27,7 @@ async function pourPage(p, m) {
   const refs = m ? await referentDe(m.id, [p.id]) : new Set();
   return versPage(p, {
     origines: await originesDe([p]),
-    droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)) } : null,
+    droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)), peut_reconduire: peutReconduire(m, p, refs.has(p.id)) } : null,
   });
 }
 

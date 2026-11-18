@@ -1,4 +1,4 @@
-import { appelant, peutModifier, peutCreer, referentDe } from '../_lib/autorisation.js';
+import { appelant, peutModifier, peutReconduire, peutCreer, referentDe } from '../_lib/autorisation.js';
 import {
   CATEGORIES, CHAMPS_LUS, versPage, versPublic, anneesPubliques, originesDe,
 } from '../_lib/projets.js';
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
       projets: projets.map((p) => {
         const f = versPage(p, {
           origines,
-          droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)) } : null,
+          droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)), peut_reconduire: peutReconduire(m, p, refs.has(p.id)) } : null,
         });
         return m ? f : versPublic(f);
       }),

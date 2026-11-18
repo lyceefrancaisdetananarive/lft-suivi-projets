@@ -1,4 +1,6 @@
-import { appelant, reArmer, estDirection, nomAffiche, CATS_VIE_SCOLAIRE } from '../_lib/autorisation.js';
+import {
+  appelant, reArmer, estDirection, nomAffiche, peutReconduire, referentDe,
+} from '../_lib/autorisation.js';
 import { CHAMPS_LUS } from '../_lib/projets.js';
 import { anneeCourante, anneeSuivante, anneeValide } from '../_lib/annee.js';
 import { journaliser } from '../_lib/journal.js';
@@ -56,6 +58,7 @@ export default async function handler(req, res) {
       `annee=eq.${cible}&reconduit_de=in.(${ids.join(',')})&select=reconduit_de`))
       .map((x) => x.reconduit_de));
 
+    const refs = await referentDe(m.id, [...sources.keys()]);
     const erreurs = [];
     const ignores = [];
     const retenus = [];
@@ -64,8 +67,10 @@ export default async function handler(req, res) {
       if (!p || p.supprime_le) { erreurs.push({ id, motif: 'introuvable' }); continue; }
       const etiquette = { id, code: p.code, annee: p.annee, nom: p.nom };
       if (p.annee === cible) { erreurs.push({ ...etiquette, motif: `déjà en ${cible}` }); continue; }
-      if (m.role === 'vie_scolaire' && !CATS_VIE_SCOLAIRE.includes(p.categorie)) {
-        erreurs.push({ ...etiquette, motif: 'hors de vos catégories' }); continue;
+      if (!peutReconduire(m, p, refs.has(id))) {
+        erreurs.push({ ...etiquette, motif: m.role === 'vie_scolaire'
+          ? 'hors de vos catégories' : 'ni votre projet, ni un projet dont vous êtes référent' });
+        continue;
       }
       if (deja.has(id)) { ignores.push({ ...etiquette, motif: 'déjà reconduit' }); continue; }
       retenus.push(p);
@@ -95,14 +100,18 @@ export default async function handler(req, res) {
         throw e;
       }
 
-      // Les référents suivent leur fiche.
+      // Les référents suivent leur fiche, et l'auteur d'origine en devient un :
+      // la copie n'appartient pas qu'à la personne qui l'a reconduite.
       const nouveau = new Map(crees.map((c) => [c.reconduit_de, c.id]));
-      const refs = await lire('projet_referents',
+      const anciens = await lire('projet_referents',
         `projet_id=in.(${retenus.map((p) => p.id).join(',')})&select=projet_id,membre_id`);
-      if (refs.length) {
+      const lignesRefs = anciens.map((r) => ({ projet_id: nouveau.get(r.projet_id), membre_id: r.membre_id }));
+      for (const p of retenus) {
+        if (p.cree_par && p.cree_par !== m.id) lignesRefs.push({ projet_id: nouveau.get(p.id), membre_id: p.cree_par });
+      }
+      if (lignesRefs.length) {
         await ecrire('projet_referents', 'on_conflict=projet_id,membre_id',
-          refs.map((r) => ({ projet_id: nouveau.get(r.projet_id), membre_id: r.membre_id })),
-          'POST', 'resolution=ignore-duplicates');
+          lignesRefs, 'POST', 'resolution=ignore-duplicates');
       }
     }
 
