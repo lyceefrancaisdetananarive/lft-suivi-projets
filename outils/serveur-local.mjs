@@ -141,6 +141,23 @@ function demarrer() {
   createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     try {
+      // Connexion d'essai : la route lit elle-même le fichier des comptes d'essai, si
+      // bien qu'aucun mot de passe ne passe par l'adresse, la console ou un outil.
+      // Serveur local uniquement (outils/ n'est jamais déployé).
+      if (url.pathname === '/__essai/connexion') {
+        const cle = String(url.searchParams.get('cle') || '').toUpperCase();
+        const c = existsSync(FICHIER_COMPTES) ? Object.fromEntries(readFileSync(FICHIER_COMPTES, 'utf8').split('\n')
+          .filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)])) : {};
+        if (!/^[A-Z]+$/.test(cle) || !c[`${cle}_EMAIL`]) { res.writeHead(404); res.end('Compte d\'essai inconnu'); return; }
+        const h = await gestionnaire('auth/connexion');
+        req.method = 'POST'; req.query = {};
+        req.body = { email: c[`${cle}_EMAIL`], motDePasse: c[`${cle}_MDP`] };
+        req.headers.origin = `http://${req.headers.host}`;
+        res.status = (s) => { res.statusCode = s; return res; };
+        res.json = (o) => { res.setHeader('content-type', 'application/json; charset=utf-8'); res.end(JSON.stringify({ ok: o.ok, role: o.role, message: o.message })); return res; };
+        await h(req, res);
+        return;
+      }
       if (url.pathname.startsWith('/api/')) {
         const h = await gestionnaire(url.pathname.slice(5).replace(/\/$/, ''));
         if (!h) { res.writeHead(404, { 'content-type': 'application/json' }); res.end('{"ok":false,"message":"Introuvable."}'); return; }
@@ -160,7 +177,7 @@ function demarrer() {
         return;
       }
       let chemin = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-      const ok = PUBLICS.has(chemin) || /^\/fonts\/[A-Za-z_-]+\.woff2$/.test(chemin);
+      const ok = PUBLICS.has(chemin) || /^\/fonts\/[A-Za-z_-]+\.woff2$/.test(chemin) || /^\/images\/[a-z-]+\.jpg$/.test(chemin);
       const f = join(RACINE, chemin);
       if (!ok || !f.startsWith(RACINE) || !existsSync(f) || !statSync(f).isFile()) { res.writeHead(404); res.end('Introuvable'); return; }
       res.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });

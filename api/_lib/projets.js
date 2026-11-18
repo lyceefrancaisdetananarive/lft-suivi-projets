@@ -41,7 +41,7 @@ export const PRIORITES = ['haute', 'moyenne', 'basse'];
 const TEXTES = {
   nom: 300, echelle: 200, sous_axe: 300, disciplines: 1000, niveaux: 500,
   description: 8000, objectifs: 8000, partenariats: 3000, ressources: 3000,
-  valorisation: 3000, referents: 1000,
+  valorisation: 3000, referents: 1000, classes: 500,
 };
 export const CHAMPS_EDITABLES = [...Object.keys(TEXTES), 'categorie', 'axe', 'priorite',
   'date_debut', 'date_fin', 'parcours', 'phare_propose'];
@@ -110,7 +110,7 @@ export function datesOrdonnees(valeurs, existant = {}) {
 export const CHAMPS_LUS = 'id,annee,code,categorie,nom,echelle,axe,sous_axe,disciplines,'
   + 'niveaux,description,objectifs,priorite,date_debut,date_fin,partenariats,ressources,'
   + 'valorisation,referents,cree_par,cree_par_nom,cree_le,modifie_le,supprime_le,'
-  + 'verrouille_le,reconduit_de,parcours,phare,phare_propose';
+  + 'verrouille_le,reconduit_de,parcours,phare,phare_propose,classes';
 
 /**
  * La forme renvoyée au navigateur. `origines` : id -> { annee, code } des
@@ -131,6 +131,7 @@ export function versPage(p, { origines = new Map(), droits = null } = {}) {
     sous_axe: p.sous_axe,
     disciplines: p.disciplines,
     niveaux: p.niveaux,
+    classes: p.classes,
     description: p.description,
     objectifs: p.objectifs,
     priorite: p.priorite,

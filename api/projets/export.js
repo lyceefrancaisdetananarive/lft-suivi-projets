@@ -51,6 +51,7 @@ export default async function handler(req, res) {
       ['Sous-axe', (p) => p.sous_axe],
       ['Disciplines', (p) => p.disciplines],
       ['Niveaux', (p) => p.niveaux],
+      ['Classes', (p) => p.classes],
       ['Description', (p) => p.description],
       ['Objectifs pédagogiques', (p) => p.objectifs],
       ['Statut', (p) => STATUTS[statut(p.date_debut, p.date_fin)]],
