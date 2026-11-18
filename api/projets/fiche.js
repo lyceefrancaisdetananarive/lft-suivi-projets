@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       if (message) return refus(res, 400, message);
       if (!datesOrdonnees(valeurs)) return refus(res, 400, 'La date de fin précède la date de début.');
       if (!peutCreer(m, annee, valeurs.categorie)) {
-        return refus(res, 403, 'Vie scolaire : création limitée aux clubs et aux projets de l’internat.');
+        return refus(res, 403, 'Vie scolaire : création limitée à la catégorie « Club et activité ».');
       }
       const maintenant = new Date().toISOString();
       const [p] = await ecrire('projets', `select=${CHAMPS_LUS}`, {
@@ -118,7 +118,8 @@ export default async function handler(req, res) {
       return refus(res, 403, 'Vie scolaire : un projet ne peut pas quitter vos catégories.');
     }
 
-    const changes = Object.fromEntries(Object.entries(valeurs).filter(([k, v]) => v !== p[k]));
+    const pareil = (a, b) => (a && typeof a === 'object' ? JSON.stringify(a) === JSON.stringify(b ?? {}) : a === b);
+    const changes = Object.fromEntries(Object.entries(valeurs).filter(([k, v]) => !pareil(v, p[k])));
     if (!Object.keys(changes).length) {
       return res.status(200).json({ ok: true, inchange: true, projet: await pourPage(p, m) });
     }

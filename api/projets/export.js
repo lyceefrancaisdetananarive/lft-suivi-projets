@@ -21,6 +21,14 @@ function cellule(v) {
   return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
+const PARCOURS_L = { S: 'Santé', C: 'Citoyen', A: 'Avenir', E: 'Arts et culture' };
+const AXES_L = {
+  S: ['Éducation à la santé', 'Prévention', 'Protection de la santé'],
+  C: ['Valeurs et EMC', 'Engagement', 'Éducation aux médias'],
+  A: ['Monde économique et professionnel', "Esprit d'initiative", 'Orientation'],
+  E: ['Rencontres', 'Pratiques', 'Connaissances'],
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return refus(res, 405, 'Méthode non autorisée.');
   if (!configuree()) return refus(res, 503, 'Service non configuré.');
@@ -46,7 +54,8 @@ export default async function handler(req, res) {
       ['Description', (p) => p.description],
       ['Objectifs pédagogiques', (p) => p.objectifs],
       ['Statut', (p) => STATUTS[statut(p.date_debut, p.date_fin)]],
-      ['Priorité', (p) => PRIORITES[p.priorite] ?? ''],
+      ['Projet phare', (p) => (p.phare ? 'Oui' : '')],
+      ['Parcours', (p) => Object.entries(p.parcours ?? {}).map(([k, a]) => `${PARCOURS_L[k] ?? k} (${a.map((i) => AXES_L[k]?.[i] ?? i).join(', ')})`).join(' ; ')],
       ['Début', (p) => p.date_debut],
       ['Fin', (p) => p.date_fin],
       ['Partenariats', (p) => p.partenariats],

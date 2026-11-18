@@ -6,14 +6,34 @@
 import { lire, lireTout, ecrire } from './supabase.js';
 import { statut } from './annee.js';
 
+// Cinq catégories depuis la phase 2 (18/11/2026) : les projets de
+// l'internat entrent dans « Club et activité » (aucune fiche INT en base).
 export const CATEGORIES = {
-  LFT: 'Projet LFT',
-  ZOI: 'Projet Zone OI',
-  AEFE: 'Projet AEFE',
-  INST: 'Projet institutionnel',
-  CLUB: 'Clubs et activités',
-  INT: "Projets de l'Internat",
+  LFT: "Projet d'établissement",
+  ZOI: 'Zone océan Indien',
+  AEFE: 'Réseau AEFE',
+  INST: 'Institutionnel',
+  CLUB: 'Club et activité',
 };
+
+// Les parcours éducatifs et leurs trois axes (indices 0 à 2). Textes de
+// référence : santé, circulaire 2016-008 ; citoyen, circulaire 2016-092 ;
+// Avenir et PEAC, arrêtés du 1er juillet 2015.
+export const PARCOURS = ['S', 'C', 'A', 'E'];
+
+/** { S: [0, 1] } nettoyé, ou null si la forme est fausse. */
+export function parcoursValide(x) {
+  if (x == null) return {};
+  if (typeof x !== 'object' || Array.isArray(x)) return null;
+  const v = {};
+  for (const [k, axes] of Object.entries(x)) {
+    if (!PARCOURS.includes(k) || !Array.isArray(axes)) return null;
+    const a = [...new Set(axes.map(Number))].sort();
+    if (a.some((i) => ![0, 1, 2].includes(i))) return null;
+    if (a.length) v[k] = a;
+  }
+  return v;
+}
 export const PRIORITES = ['haute', 'moyenne', 'basse'];
 
 // Les seuls champs qu'une page peut écrire. Tout le reste (code, auteur,
@@ -24,7 +44,7 @@ const TEXTES = {
   valorisation: 3000, referents: 1000,
 };
 export const CHAMPS_EDITABLES = [...Object.keys(TEXTES), 'categorie', 'axe', 'priorite',
-  'date_debut', 'date_fin'];
+  'date_debut', 'date_fin', 'parcours', 'phare_propose'];
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const dateValide = (v) => DATE.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
@@ -57,6 +77,12 @@ export function valider(entree, partiel = false) {
     if (p && !PRIORITES.includes(p)) return { message: 'Priorité inconnue.' };
     v.priorite = p;
   }
+  if ('parcours' in e) {
+    const pa = parcoursValide(e.parcours);
+    if (!pa) return { message: 'Parcours éducatifs : valeur inconnue.' };
+    v.parcours = pa;
+  }
+  if ('phare_propose' in e) v.phare_propose = e.phare_propose === true;
   for (const d of ['date_debut', 'date_fin']) {
     if (!(d in e)) continue;
     const t = e[d] ? String(e[d]).slice(0, 10) : null;
@@ -84,7 +110,7 @@ export function datesOrdonnees(valeurs, existant = {}) {
 export const CHAMPS_LUS = 'id,annee,code,categorie,nom,echelle,axe,sous_axe,disciplines,'
   + 'niveaux,description,objectifs,priorite,date_debut,date_fin,partenariats,ressources,'
   + 'valorisation,referents,cree_par,cree_par_nom,cree_le,modifie_le,supprime_le,'
-  + 'verrouille_le,reconduit_de';
+  + 'verrouille_le,reconduit_de,parcours,phare,phare_propose';
 
 /**
  * La forme renvoyée au navigateur. `origines` : id -> { annee, code } des
@@ -114,6 +140,9 @@ export function versPage(p, { origines = new Map(), droits = null } = {}) {
     ressources: p.ressources,
     valorisation: p.valorisation,
     referents: p.referents,
+    parcours: p.parcours ?? {},
+    phare: Boolean(p.phare),
+    phare_propose: Boolean(p.phare_propose),
     statut: statut(p.date_debut, p.date_fin),
     verrouille: Boolean(p.verrouille_le),
     cree_par_nom: p.cree_par_nom,
@@ -149,7 +178,7 @@ export function anneesPubliques(courante) {
 /** La forme publique d'une fiche, à partir de la forme versPage. */
 export function versPublic(f) {
   const {
-    ressources, priorite, cree_par_nom, cree_le, modifie_le, referents, ...reste
+    ressources, priorite, cree_par_nom, cree_le, modifie_le, referents, phare_propose, ...reste
   } = f;
   return { ...reste, referents: nomsPublics() ? referents : null };
 }

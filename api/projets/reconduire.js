@@ -19,7 +19,8 @@ import {
 // de tous les visiteurs).
 
 const CONTENU = ['categorie', 'nom', 'echelle', 'axe', 'sous_axe', 'disciplines', 'niveaux',
-  'description', 'objectifs', 'priorite', 'partenariats', 'ressources', 'valorisation', 'referents'];
+  'description', 'objectifs', 'priorite', 'partenariats', 'ressources', 'valorisation', 'referents',
+  'parcours'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return refus(res, 405, 'Méthode non autorisée.');
