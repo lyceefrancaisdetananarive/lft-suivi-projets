@@ -126,7 +126,7 @@ async function creerComptes() {
 
 // ------------------------------------------------------------ serveur
 const PUBLICS = new Set(['/index.html', '/logo-lft.jpg', '/logo_aefe_egd.png']);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const gestionnaires = new Map();
 async function gestionnaire(nom) {
   if (!gestionnaires.has(nom)) {
@@ -177,7 +177,7 @@ function demarrer() {
         return;
       }
       let chemin = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-      const ok = PUBLICS.has(chemin) || /^\/fonts\/[A-Za-z_-]+\.woff2$/.test(chemin) || /^\/images\/[a-z-]+\.jpg$/.test(chemin);
+      const ok = PUBLICS.has(chemin) || /^\/fonts\/[A-Za-z_-]+\.woff2$/.test(chemin) || /^\/images\/(partenaires\/)?[a-z-]+\.(jpg|png|svg)$/.test(chemin);
       const f = join(RACINE, chemin);
       if (!ok || !f.startsWith(RACINE) || !existsSync(f) || !statSync(f).isFile()) { res.writeHead(404); res.end('Introuvable'); return; }
       res.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });

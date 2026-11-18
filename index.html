@@ -400,8 +400,12 @@ body.vitrine #bandeaux{margin-top:16px}
 .defilant{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .defilant>div{display:flex;width:max-content;animation:defile 70s linear infinite}
 .defilant:hover>div{animation-play-state:paused}
-.defilant span{display:flex;align-items:center;gap:56px;padding-right:56px;font-family:var(--serif);font-style:italic;font-size:clamp(26px,3vw,46px);line-height:1.3;color:var(--encre);white-space:nowrap}
-.defilant span::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--vert);flex-shrink:0}
+.defilant>div{align-items:center}
+.defilant .pt{display:flex;align-items:center;gap:14px;height:clamp(64px,7vw,96px);padding:0 clamp(32px,4vw,64px);flex-shrink:0;font-family:var(--serif);font-style:italic;font-size:clamp(22px,2.2vw,32px);line-height:1.2;color:var(--encre);white-space:nowrap}
+.defilant .pt img{height:72%;width:auto;mix-blend-mode:multiply}
+.defilant .pt img.haut{height:100%}
+.defilant .pt img.bas{height:52%}
+.defilant .pt small{font-family:var(--sans);font-style:normal;font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--encre)}
 @keyframes defile{to{transform:translateX(-50%)}}
 /* Bande photo de fin, avec plaque de verre */
 .rideau>.bande-photo{max-width:none;width:auto;margin-inline:calc(-1 * clamp(16px,3.5vw,56px))}
@@ -485,7 +489,7 @@ html.anim .revele.vu{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){
   .defilant>div{animation:none;flex-wrap:wrap;width:auto}
   .defilant .bis{display:none}
-  .defilant span{white-space:normal}
+  .defilant .pt{white-space:normal}
   .defiler i::after{animation:none}
   .decor i{transition:none}
 }
@@ -1012,6 +1016,22 @@ function partenairesDe(ps){
     .forEach(x=>{ const k=norm(x); if(!vus.has(k)) vus.set(k,x); }));
   return [...vus.values()];
 }
+/* Logos officiels des partenaires (images/partenaires/), reconnus par leur nom
+   dans les fiches. Sans logo connu, le nom s'écrit en toutes lettres. L'AEFE reste
+   en texte : sa charte interdit d'apposer son logo seul. */
+const LOGOS_PARTENAIRES=[
+  [/\bwwf\b/, 'wwf.png', 'haut'],
+  [/\bird\b|institut de recherche pour le developpement/, 'ird.png', ''],
+  [/\bonac/, 'onacvg.png', 'haut', 'ONaCVG'],
+  [/france education international|\bciep\b/, 'france-education-international.svg', 'bas'],
+  [/alliance francaise/, 'alliance-francaise.svg', 'haut'],
+  [/ministere de l.?environnement/, 'medd.png', ''],
+];
+function partenaireHtml(nom){
+  const k=norm(nom), l=LOGOS_PARTENAIRES.find(([re])=>re.test(k));
+  if(!l) return `<span class="pt">${esc(nom)}</span>`;
+  return `<span class="pt"><img src="/images/partenaires/${l[1]}" alt="" class="${l[2]}" loading="lazy" decoding="async">${l[3]?`<small>${esc(l[3])}</small>`:''}</span>`;
+}
 const FLECHE='<span class="fleche" aria-hidden="true">'+IC.retour+'</span>';
 let _entree=true, _diapo=null;
 /* Les photos du décor se relaient lentement ; rien ne bouge si l'appareil le demande. */
@@ -1052,13 +1072,13 @@ function vueVitrine(mc){
         <span><span class="t">${esc(p.nom)}</span><span class="m"><span>${esc(CAT[p.categorie]?CAT[p.categorie].l:p.categorie)}</span><span>${esc(periode(p))}</span>${p.niveaux?`<span>${esc(p.niveaux.length>48?p.niveaux.slice(0,46)+'…':p.niveaux)}</span>`:''}</span>${p.description?`<span class="r">${esc(p.description)}</span>`:''}</span>${FLECHE}</a>`).join('')}</div>
     </section>` : '';
   const cats=Object.keys(CAT).map(k=>[k,ps.filter(p=>p.categorie===k).length]).filter(([,n])=>n);
-  const bande=partenaires.map(x=>`<span>${esc(x)}</span>`).join('');
+  const bande=partenaires.map(partenaireHtml).join('');
   const blocHorizons = cats.length ? `<section class="revele" id="horizons">
       <div class="tete-bloc"><div><span class="surtitre">L'ouverture</span><h2>Ancrage local et citoyenneté <em>mondiale</em></h2></div>
         <p>Projets d'établissement, actions de la zone océan Indien, concours et labels du réseau AEFE, clubs : autant d'occasions d'ouvrir la classe sur le pays d'accueil et sur le monde.</p></div>
       <div class="horizons">${cats.map(([k,n])=>`<button type="button" onclick="filtrerVers('${k}')"><strong>${n}</strong><span>${esc(CAT[k].l)}</span></button>`).join('')}</div>
       ${partenaires.length>=3?`<div class="partenaires"><span class="surtitre">Partenariats culturels et éducatifs</span>
-        <div class="defilant"><span class="sr">${esc(partenaires.join(', '))}</span><div aria-hidden="true">${bande}${bande.replace(/<span>/g,'<span class="bis">')}</div></div></div>`:''}
+        <div class="defilant"><span class="sr">${esc(partenaires.join(', '))}</span><div aria-hidden="true">${bande}${bande.replace(/<span class="pt">/g,'<span class="pt bis">')}</div></div></div>`:''}
     </section>` : '';
   const blocParcours = `<section class="revele" id="parcours-vitrine">
       <div class="tete-bloc"><div><span class="surtitre">Les parcours éducatifs</span><h2>Accompagner chaque <em>élève</em></h2></div>
