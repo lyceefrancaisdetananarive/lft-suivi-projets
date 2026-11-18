@@ -671,7 +671,7 @@ const PHARES_MAX = 3;
    qu'aux personnels connectés. */
 const serie=(p,n)=>Array.from({length:n},(_,i)=>p+(i+1));
 const CLASSES = {'6e':serie('6M',6), '5e':serie('5M',7), '4e':serie('4M',7), '3e':serie('3M',7), '2nde':serie('2DE',9).concat(serie('2PRO',2)),
-  '1re':serie('1G',7).concat(serie('1STMG',2),serie('1PROAGORA',2)), 'Tle':serie('TG',8).concat(serie('TSTMG',2))};
+  '1re':serie('1G',7).concat(serie('1STMG',2),serie('1PROAGORA',2)), 'Tle':serie('TG',8).concat(serie('TSTMG',2),['TPROAGORA','TPROVENTE'])};
 const TOUTES_CLASSES = Object.values(CLASSES).flat();
 const DISCIPLINES = ['Allemand','Anglais','Arts plastiques','Documentation','Économie-gestion','Éducation musicale','EMC','Enseignement scientifique','EPS','Espagnol',
   'Français','Histoire-géographie','HGGSP','Humanités, littérature et philosophie','Latin','Malgache','Mandarin','Mathématiques','NSI','Orientation','Philosophie',
