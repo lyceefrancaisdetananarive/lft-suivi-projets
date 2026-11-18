@@ -444,6 +444,37 @@ html.anim .revele.vu{opacity:1;transform:none}
 .cl-rang{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .cl-rang b{width:48px;font-size:13px}
 .puce.mini{min-height:36px;padding:6px 12px;font-size:13px;border-radius:10px}
+/* Élèves d'une classe : personnels connectés seulement */
+.elv{display:flex;flex-direction:column;gap:10px}
+.elv-legende{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--gris)}
+.elv-legende>span{display:inline-flex;align-items:center;gap:6px}
+.elv details{border:1px solid var(--bord);border-radius:14px;background:#fff}
+.elv summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;font-size:14px;list-style:none;border-radius:14px}
+.elv summary::-webkit-details-marker{display:none}
+.elv summary:hover{background:var(--doux)}
+.elv summary small{color:var(--gris);font-size:12.5px;margin-left:6px}
+.elv summary::after{content:'';width:8px;height:8px;border-right:2px solid var(--gris);border-bottom:2px solid var(--gris);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .2s}
+.elv details[open] summary::after{transform:rotate(-135deg);margin-top:4px}
+.elv-corps{display:flex;flex-direction:column;gap:10px;padding:2px 14px 14px}
+.elv-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:0 12px}
+.elv-grille label{display:flex;align-items:center;gap:9px;padding:6px;border-radius:8px;font-size:13.5px;cursor:pointer}
+.elv-grille label:hover{background:var(--doux)}
+.elv-grille input{width:17px;height:17px;accent-color:var(--bleu);flex-shrink:0;margin:0}
+.mq{display:inline-flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
+.mq>span{display:inline-flex}
+.mq svg,.elv-legende svg,.bascule svg{width:15px;height:15px;display:block;flex-shrink:0}
+.mq .sig,.elv-legende .sig,.bascule .sig{font-size:10px;font-weight:700;letter-spacing:.03em;line-height:1;padding:3px 5px;border-radius:6px;background:#E3EEF8;color:var(--bleu)}
+.sig.pap{background:#F6E6F1;color:var(--magenta)}
+.elv-liste{display:flex;flex-direction:column;gap:14px}
+.elv-liste ul{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px}
+.elv-liste li{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px;color:var(--texte2)}
+.reperes-tab{width:100%;border-collapse:collapse;font-size:14px}
+.reperes-tab th{text-align:left;font-size:12px;font-weight:700;color:var(--gris);padding:8px 6px;border-bottom:1px solid var(--bord)}
+.reperes-tab td{padding:6px;border-bottom:1px solid var(--trait)}
+.reperes-tab td.c,.reperes-tab th.c{text-align:center}
+.bascule{width:34px;height:30px;border-radius:9px;border:1.5px solid var(--bord);background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:.45}
+.bascule[aria-pressed="true"]{opacity:1;border-color:var(--bleu);background:#E3EEF8}
+.bascule:disabled{cursor:wait}
 .jetons{position:relative}
 .jetons-boite{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:52px;padding:7px 10px;border-radius:14px;border:1px solid var(--champ);background:#fff;cursor:text}
 .jetons-boite:focus-within{border-color:var(--bleu);box-shadow:0 0 0 4px rgba(0,84,159,.12)}
@@ -634,10 +665,11 @@ const AXES_PE = [
 const ROLE_L = {admin:"Administrateur de l'application", direction:'Direction', vie_scolaire:'Vie scolaire', enseignant:'Enseignant', eleve:'Élève'};
 const PHARES_MAX = 3;
 /* Les classes du lycée en 2026-2027, par niveau (à mettre à jour à chaque rentrée,
-   d'après le planning des conseils de classe). Des noms de classes, jamais d'élèves. */
+   d'après Pronote). Les élèves de chaque classe ne sont servis par /api/projets/eleves
+   qu'aux personnels connectés. */
 const serie=(p,n)=>Array.from({length:n},(_,i)=>p+(i+1));
-const CLASSES = {'6e':serie('6M',6), '5e':serie('5M',7), '4e':serie('4M',7), '3e':serie('3M',7), '2nde':serie('2DE',9),
-  '1re':serie('1G',7).concat(serie('1STMG',2)), 'Tle':serie('TG',8).concat(serie('TSTMG',2))};
+const CLASSES = {'6e':serie('6M',6), '5e':serie('5M',7), '4e':serie('4M',7), '3e':serie('3M',7), '2nde':serie('2DE',9).concat(serie('2PRO',2)),
+  '1re':serie('1G',7).concat(serie('1STMG',2),serie('1PROAGORA',2)), 'Tle':serie('TG',8).concat(serie('TSTMG',2))};
 const TOUTES_CLASSES = Object.values(CLASSES).flat();
 const DISCIPLINES = ['Allemand','Anglais','Arts plastiques','Documentation','Économie-gestion','Éducation musicale','EMC','Enseignement scientifique','EPS','Espagnol',
   'Français','Histoire-géographie','HGGSP','Humanités, littérature et philosophie','Latin','Malgache','Mandarin','Mathématiques','NSI','Orientation','Philosophie',
@@ -853,7 +885,7 @@ document.addEventListener('visibilitychange',()=>{
 
 /* ═══════════════════════════════════════════════════════════
    NAVIGATION : #/ liste, #/projet/CODE, #/nouveau, #/modifier/CODE, #/tableau,
-   #/parcours, #/direction, #/corbeille, #/comptes, #/aide, #/mentions.
+   #/parcours, #/direction, #/corbeille, #/comptes, #/eleves/CLASSE, #/aide, #/mentions.
    L'année consultée voyage dans ?annee= quand ce n'est pas l'année courante.
 ═══════════════════════════════════════════════════════════ */
 function lireRoute(){
@@ -896,6 +928,7 @@ function dessinerEntete(){
     h+=`<div class="compte"><button class="compte-btn" id="compte-btn" aria-expanded="false" aria-controls="compte-menu" onclick="basculerMenu()"><span class="compte-ini">${esc(initiales(nom))}</span><span class="sr">Mon compte : </span>${esc(S.user.prenom||nom)}</button>
       <div class="compte-menu" id="compte-menu"><div class="qui"><strong>${esc(nom)}</strong><span>${esc(ROLE_L[S.user.role]||S.user.role)}</span></div>
       ${estDirection()?'<a href="#/direction">Pilotage de l\'année</a><a href="#/comptes">Comptes et journal</a>':''}
+      ${peutReperer()?'<a href="#/eleves">Élèves : mandats et PAP</a>':''}
       <a href="#/aide">Aide</a>
       ${(S.user.role==='enseignant'||S.user.role==='vie_scolaire')?'<button onclick="demanderSuppression()">Demander la suppression de mon compte</button>':''}
       <button onclick="seDeconnecter()">Se déconnecter</button></div></div>`;
@@ -962,6 +995,7 @@ function rendre(){
     case 'corbeille': return vueCorbeille(mc);
     case 'comptes': return vueComptes(mc);
     case 'aide': return vueAide(mc);
+    case 'eleves': return vueReperes(mc,r.arg);
     case 'mentions': return vueMentions(mc);
     case 'connexion': ouvrirConnexion(); location.hash='#/'; return;
     default: location.hash='#/';
@@ -1171,6 +1205,7 @@ function vueFiche(mc,code){
     <div class="deux-col">
       <div class="princ">
         ${objectifs.length?`<section class="carte bloc"><h2>Objectifs</h2>${objectifs.length>1?`<ul class="liste">${objectifs.map(o=>`<li>${esc(o)}</li>`).join('')}</ul>`:`<p class="txt">${esc(objectifs[0])}</p>`}</section>`:''}
+        ${voitEleves()&&lireClasses(p.classes).classes.length?`<section class="carte bloc"><h2>Élèves concernés</h2><div id="fiche-elv"><div class="chargement" style="padding:12px"><span class="rond-charge"></span></div></div></section>`:''}
         ${p.partenariats?`<section class="carte bloc"><h2>Partenariats</h2><p class="txt">${esc(p.partenariats)}</p></section>`:''}
         ${S.user&&p.ressources?`<section class="carte bloc"><h2>Moyens nécessaires</h2><p class="txt">${esc(p.ressources)}</p></section>`:''}
         ${S.user?`<section class="carte bloc"><h2>Échanges de l'équipe</h2><div id="coms" style="display:flex;flex-direction:column;gap:14px"><div class="chargement" style="padding:12px"><span class="rond-charge"></span></div></div>
@@ -1193,6 +1228,19 @@ function vueFiche(mc,code){
     <div class="actions-fiche verre">${S.user?actions.join(''):`<button class="btn btn-bleu" onclick="partager()">Partager ce projet</button><button class="btn btn-clair" onclick="window.print()">Imprimer ou PDF</button>`}</div>
   </div>`;
   if(S.user) chargerCommentaires(p.id);
+  if(voitEleves()&&lireClasses(p.classes).classes.length) chargerElevesFiche(p);
+}
+async function chargerElevesFiche(p){
+  const cls=lireClasses(p.classes).classes;
+  try{
+    const [d]=await Promise.all([api('projets/eleves',{query:{projet:p.id}}),chargerEleves(p.annee,cls)]);
+    const el=$('fiche-elv'); if(!el) return;
+    const retenus=d.eleves;
+    el.innerHTML=`<div class="elv-liste">${cls.map(k=>{ const l=retenus.filter(x=>x.classe===k), n=elevesDe(p.annee,k).length;
+      return `<div><strong>${esc(k)}</strong> <span class="aide">${l.length?`${l.length} élève${l.length>1?'s':''}${n?' sur '+n:''}`:n?`toute la classe, ${n} élèves`:'toute la classe'}</span>
+        ${l.length?`<ul>${l.map(x=>`<li><span>${esc(x.nom)} ${esc(x.prenom)}</span>${marques(x)}</li>`).join('')}</ul>`:''}</div>`; }).join('')}
+      ${retenus.some(x=>x.pap||x.mandats.length)?legendeEleves():''}</div>`;
+  }catch(e){ const el=$('fiche-elv'); if(el) el.innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; }
 }
 async function chargerCommentaires(id){
   try{
@@ -1269,16 +1317,82 @@ function dessinerNiveaux(o){
   c.innerHTML=`<div class="puces" role="group" aria-label="Niveaux">${NIV_CHOIX.map(n=>`<button type="button" class="puce" aria-pressed="${e.niveaux.includes(n)}" onclick="basculerNiveau('${o}','${n}')">${n}</button>`).join('')}</div>
     ${nivs.length?`<div class="classes-niv"><span class="aide">Tout le niveau est concerné ? Ne cochez rien. Sinon, choisissez les classes.</span>
       ${nivs.map(n=>`<div class="cl-rang" role="group" aria-label="Classes de ${n}"><b>${n}</b>${CLASSES[n].map(k=>`<button type="button" class="puce mini" aria-pressed="${e.classes.includes(k)}" onclick="basculerClasse('${o}','${k}')">${k}</button>`).join('')}</div>`).join('')}</div>`:''}
+    <div id="${o}-elv"></div>
     <label class="champ"><small>Autre classe ou groupe (facultatif)</small><input class="saisie" maxlength="200" value="${esc(e.autresClasses)}" placeholder="Par exemple : 2nde Pro, section européenne, club radio" oninput="etatDe('${o}').autresClasses=this.value"></label>`;
+  dessinerEleves(o);
 }
 function basculerNiveau(o,n){
   const e=etatDe(o), l=e.niveaux;
   if(n==='Tous niveaux') e.niveaux=l.includes(n)?[]:['Tous niveaux'];
   else { e.niveaux=l.filter(x=>x!=='Tous niveaux'); e.niveaux=e.niveaux.includes(n)?e.niveaux.filter(x=>x!==n):e.niveaux.concat([n]); }
-  e.classes=e.classes.filter(k=>e.niveaux.includes(nivDeClasse(k)));
+  e.classes=e.classes.filter(k=>e.niveaux.includes(nivDeClasse(k))); elaguerEleves(e);
   dessinerNiveaux(o); apresChangement(o);
 }
-function basculerClasse(o,k){ const e=etatDe(o); e.classes=e.classes.includes(k)?e.classes.filter(x=>x!==k):e.classes.concat([k]); dessinerNiveaux(o); }
+function basculerClasse(o,k){ const e=etatDe(o); e.classes=e.classes.includes(k)?e.classes.filter(x=>x!==k):e.classes.concat([k]); elaguerEleves(e); dessinerNiveaux(o); }
+
+/* Élèves des classes choisies (décision du 18/11/2026, AIPD et avis du DPD) : visibles des
+   seuls personnels connectés. Sans élève coché, toute la classe est concernée. */
+const ELV={};                       // « annee|classe » : liste des élèves
+const voitEleves=()=>!!S.user&&['enseignant','vie_scolaire','direction','admin'].includes(S.user.role);
+const peutReperer=()=>!!S.user&&['vie_scolaire','direction','admin'].includes(S.user.role);
+const elevesDe=(a,k)=>ELV[a+'|'+k]||[];
+const ETOILE='M8 1.4l2 4.2 4.6.6-3.4 3.2.9 4.6L8 11.8 3.9 14l.9-4.6L1.4 6.2 6 5.6z';
+const MQ={
+  delegue_titulaire:{l:'Délégué titulaire',i:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${ETOILE}" fill="#00549F"/></svg>`},
+  delegue_suppleant:{l:'Délégué suppléant',i:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${ETOILE}" fill="none" stroke="#00549F" stroke-width="1.4" stroke-linejoin="round"/></svg>`},
+  eco_delegue:{l:'Éco-délégué',i:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M14 2C7.5 2 3 4.8 3 9.6c0 1.3.4 2.5 1.1 3.4C5.2 9.8 7.6 7.4 10.8 6 8.1 7.9 6.1 10.4 5.3 13.6c.8.5 1.8.8 2.9.8C12.9 14.4 14 9.2 14 2z" fill="#4E6A12"/></svg>'},
+  cvc:{l:'Élu au conseil de la vie collégienne',i:'<span class="sig">CVC</span>'},
+  cvl:{l:'Élu au conseil de la vie lycéenne',i:'<span class="sig">CVL</span>'},
+  pap:{l:"Plan d'accompagnement personnalisé",i:'<span class="sig pap">PAP</span>'},
+};
+function marques(x){
+  const l=(x.mandats||[]).filter(m=>MQ[m]).concat(x.pap?['pap']:[]);
+  return l.length?`<span class="mq">${l.map(m=>`<span role="img" title="${esc(MQ[m].l)}" aria-label="${esc(MQ[m].l)}">${MQ[m].i}</span>`).join('')}</span>`:'';
+}
+const legendeEleves=()=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl','pap'].map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
+async function chargerEleves(a,classes){
+  const manque=classes.filter(k=>!ELV[a+'|'+k]);
+  if(!manque.length) return;
+  const d=await api('projets/eleves',{query:{annee:a,classes:manque.join(',')}});
+  manque.forEach(k=>{ ELV[a+'|'+k]=[]; });
+  d.eleves.forEach(x=>{ (ELV[a+'|'+x.classe]=ELV[a+'|'+x.classe]||[]).push(x); });
+}
+function elaguerEleves(e){
+  if(!e.eleves) return;
+  const ok=new Set(e.classes.flatMap(k=>elevesDe(e.annee,k).map(x=>x.id)));
+  e.eleves=e.eleves.filter(id=>ok.has(id));
+}
+function resumeClasse(e,k){
+  const l=elevesDe(e.annee,k), n=l.filter(x=>e.eleves.includes(x.id)).length;
+  return !l.length?'':n?`${n} élève${n>1?'s':''} sur ${l.length}`:`toute la classe, ${l.length} élèves`;
+}
+async function dessinerEleves(o){
+  const e=etatDe(o), c=$(o+'-elv'); if(!c) return;
+  const cls=TOUTES_CLASSES.filter(k=>e.classes.includes(k));
+  if(!cls.length||!voitEleves()){ c.innerHTML=''; return; }
+  if(e.elevesErreur){ c.innerHTML=`<span class="aide">${esc(e.elevesErreur)}</span>`; return; }
+  if(!e.elevesPrets||cls.some(k=>!ELV[e.annee+'|'+k])){
+    c.innerHTML='<div class="chargement" style="padding:8px"><span class="rond-charge"></span> Listes de classe…</div>';
+    if(!e.elevesPrets) return;              // la fiche charge d'abord les élèves déjà retenus
+    try{ await chargerEleves(e.annee,cls); }
+    catch(err){ c.innerHTML=`<span class="aide">Listes de classe indisponibles : ${esc(msgErr(err))}</span>`; return; }
+    if(etatDe(o)!==e) return;
+    return dessinerEleves(o);
+  }
+  e.ouverts=e.ouverts||[];
+  c.innerHTML=`<div class="elv"><span class="aide">Toute la classe participe ? Ne cochez personne. Sinon, ouvrez la classe et cochez les élèves concernés.</span>${legendeEleves()}
+    ${cls.map(k=>{ const l=elevesDe(e.annee,k);
+      return `<details ${e.ouverts.includes(k)?'open':''} ontoggle="majOuvert('${o}','${k}',this.open)"><summary><span><b>${k}</b><small id="${o}-elv-n-${k}">${resumeClasse(e,k)}</small></span></summary>
+      <div class="elv-corps">${l.length?`<div><button type="button" class="btn btn-clair" style="min-height:36px;padding:6px 14px;font-size:13px" onclick="toutLaClasse('${o}','${k}')">Toute la classe</button></div>
+        <div class="elv-grille">${l.map(x=>`<label><input type="checkbox" ${e.eleves.includes(x.id)?'checked':''} onchange="basculerEleve('${o}','${x.id}','${k}',this.checked)"><span>${esc(x.nom)} ${esc(x.prenom)}</span>${marques(x)}</label>`).join('')}</div>`
+        :`<span class="aide">Pas de liste d'élèves pour cette classe en ${esc(e.annee)}.</span>`}</div></details>`; }).join('')}</div>`;
+}
+function majOuvert(o,k,ouvert){ const e=etatDe(o); e.ouverts=(e.ouverts||[]).filter(x=>x!==k).concat(ouvert?[k]:[]); }
+function basculerEleve(o,id,k,on){
+  const e=etatDe(o); e.eleves=on?[...new Set(e.eleves.concat([id]))]:e.eleves.filter(x=>x!==id);
+  const s=$(o+'-elv-n-'+k); if(s) s.textContent=resumeClasse(e,k);
+}
+function toutLaClasse(o,k){ const e=etatDe(o), ids=new Set(elevesDe(e.annee,k).map(x=>x.id)); e.eleves=e.eleves.filter(x=>!ids.has(x)); dessinerEleves(o); }
 
 /* Parcours : les trois axes de chaque parcours sont visibles d'emblée ; cocher un axe
    suffit, le parcours suit. */
@@ -1425,7 +1539,7 @@ const TEXTE_PHARE="Facultatif. Chaque année, la direction retient au plus trois
 
 function departAssistant(){
   const moi=S.user?[S.user.prenom,(S.user.nom||'').toUpperCase()].filter(Boolean).join(' '):'';
-  return {etape:1, nom:'', cat:S.catsAutorisees.includes('LFT')?'LFT':S.catsAutorisees[0], niveaux:[], classes:[], autresClasses:'', axe:null, description:'', objectifs:'', parcours:{},
+  return {etape:1, nom:'', cat:S.catsAutorisees.includes('LFT')?'LFT':S.catsAutorisees[0], niveaux:[], classes:[], autresClasses:'', annee:S.year, eleves:[], elevesPrets:true, axe:null, description:'', objectifs:'', parcours:{},
     equipe:moi?[moi]:[], matieres:[], debut:'', fin:'', calMois:null, phare:false, cree:null};
 }
 function vueAssistant(mc){
@@ -1493,7 +1607,7 @@ function suivantAssistant(btn){
   occupe(btn,async()=>{
     try{
       const d=await api('projets/fiche',{methode:'POST',corps:{annee:S.year,nom:A.nom.trim(),categorie:A.cat,axe:A.cat==='LFT'?A.axe:null,
-        niveaux:texteNiveaux(A.niveaux),classes:texteClasses(A),description:A.description,objectifs:A.objectifs,parcours:A.parcours,referents:A.equipe.join(', '),
+        niveaux:texteNiveaux(A.niveaux),classes:texteClasses(A),eleves:A.eleves,description:A.description,objectifs:A.objectifs,parcours:A.parcours,referents:A.equipe.join(', '),
         disciplines:A.matieres.join(', '),date_debut:A.debut||null,date_fin:A.fin||null,phare_propose:A.phare}});
       A.cree=d.projet; await actualiser(false); dessinerAssistant(); window.scrollTo({top:0}); toast('Projet créé.');
     }catch(e){ erreurAs(msgErr(e)); }
@@ -1507,6 +1621,7 @@ function vueModifier(mc,code){
   if(!p||!p.peut_modifier){ mc.innerHTML=`<div class="carte vide">Vous ne pouvez pas modifier cette fiche.<div style="margin-top:16px"><a class="btn btn-clair" href="#/">Tous les projets</a></div></div>`; return; }
   const cl=lireClasses(p.classes);
   M={id:p.id, code:p.code, modifie_le:p.modifie_le, parcours:JSON.parse(JSON.stringify(p.parcours||{})), niveaux:pucesNiveaux(p.niveaux), classes:cl.classes, autresClasses:cl.autres,
+    annee:p.annee, eleves:[], elevesPrets:false, elevesErreur:null,
     equipe:decouper(p.referents), matieres:decouper(p.disciplines), debut:p.date_debut||'', fin:p.date_fin||'', calMois:null, phare:!!p.phare_propose};
   chargerPersonnels();
   const cats=S.catsAutorisees.includes(p.categorie)?S.catsAutorisees:[p.categorie].concat(S.catsAutorisees);
@@ -1545,6 +1660,12 @@ function vueModifier(mc,code){
       <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><a class="btn btn-clair" href="#/projet/${encodeURIComponent(p.code)}">Annuler</a><button class="btn btn-accent" onclick="enregistrerModif(this)">Enregistrer</button></div>
     </div></div></div>`;
   dessinerNiveaux('M'); dessinerParcours('M'); dessinerJetons('M','equipe'); dessinerJetons('M','matieres'); dessinerCalendrier('M');
+  if(voitEleves()) chargerElevesRetenus(M);
+}
+async function chargerElevesRetenus(e){
+  try{ const d=await api('projets/eleves',{query:{projet:e.id}}); e.eleves=d.eleves.map(x=>x.id); e.elevesPrets=true; }
+  catch(err){ e.elevesErreur="Les élèves retenus n'ont pas pu être chargés : ils restent tels quels à l'enregistrement. "+msgErr(err); }
+  if(M===e) dessinerEleves('M');
 }
 function enregistrerModif(btn){
   const err=$('m-err'); err.classList.remove('vue');
@@ -1556,6 +1677,7 @@ function enregistrerModif(btn){
       const d=await api('projets/fiche',{methode:'PATCH',corps:{id:M.id,modifie_le:M.modifie_le,nom,categorie:cat,axe:cat==='LFT'&&val('m-axe')?Number(val('m-axe')):null,
         sous_axe:val('m-sous'),niveaux:texteNiveaux(M.niveaux),classes:texteClasses(M),description:val('m-desc'),objectifs:val('m-obj'),parcours:M.parcours,
         referents:M.equipe.join(', '),disciplines:M.matieres.join(', '),echelle:val('m-ech'),date_debut:M.debut||null,date_fin:M.fin||null,
+        ...(M.elevesPrets?{eleves:M.eleves}:{}),
         partenariats:val('m-part'),ressources:val('m-ress'),valorisation:val('m-val'),phare_propose:M.phare}});
       await actualiser(false); toast(d.inchange?'Aucune modification à enregistrer.':'Fiche enregistrée.');
       location.hash='#/projet/'+encodeURIComponent(M.code);
@@ -1936,6 +2058,40 @@ function pageTexte(mc,surtitre,titre,blocs){
   mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px"><div class="tete-page"><div><span class="surtitre">${surtitre}</span><h1 class="titre">${titre}</h1></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">${blocs.map(([t,c])=>`<section class="carte bloc"><h2>${t}</h2>${c}</section>`).join('')}</div></div>`;
 }
+/* ── Repères des élèves : mandats et PAP (vie scolaire, direction, administrateur) ── */
+const ANNEE_ELEVES=()=>S.currentYear;
+async function vueReperes(mc,classe){
+  if(!peutReperer()){ mc.innerHTML=`<div class="carte vide">Page réservée à la vie scolaire et à la direction.</div>`; return; }
+  const a=ANNEE_ELEVES(), k=TOUTES_CLASSES.includes(classe)?classe:null;
+  const college=k&&['6e','5e','4e','3e'].includes(nivDeClasse(k));
+  const cols=college?['delegue_titulaire','delegue_suppleant','eco_delegue','cvc']:['delegue_titulaire','delegue_suppleant','eco_delegue','cvl'];
+  mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;flex-direction:column;gap:8px"><span class="surtitre">Élèves, ${esc(a)}</span><h1 class="titre">Mandats et <em>PAP</em></h1>
+      <p class="txt" style="max-width:760px">Délégués, éco-délégués, élus au CVC ou au CVL, et élèves bénéficiant d'un plan d'accompagnement personnalisé. Ces repères ne sont visibles que des personnels connectés, dans le choix des élèves d'un projet et sur les fiches. Aucune autre information n'est tenue ici.</p></div>
+    <section class="carte bloc" style="gap:14px"><h2 class="sec">Classe</h2><div class="classes-niv" style="background:none;padding:0">${NIVEAUX.map(n=>`<div class="cl-rang"><b>${n}</b>${CLASSES[n].map(c=>`<a class="puce mini" style="text-decoration:none" aria-pressed="${c===k}" href="#/eleves/${c}">${c}</a>`).join('')}</div>`).join('')}</div></section>
+    ${k?`<section class="carte bloc" style="gap:14px"><h2 class="sec">${esc(k)}</h2><div id="rep-tab"><div class="chargement"><span class="rond-charge"></span></div></div></section>`:''}
+  </div>`;
+  if(!k) return;
+  try{ delete ELV[a+'|'+k]; await chargerEleves(a,[k]); }
+  catch(e){ $('rep-tab').innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; return; }
+  const l=elevesDe(a,k), t=$('rep-tab'); if(!t) return;
+  if(!l.length){ t.innerHTML=`<p class="txt">Pas de liste d'élèves pour cette classe en ${esc(a)}.</p>`; return; }
+  const entete=[...cols,'pap'];
+  t.innerHTML=`<div style="overflow-x:auto"><table class="reperes-tab"><thead><tr><th>Élève</th>${entete.map(m=>`<th class="c" title="${esc(MQ[m].l)}">${m==='delegue_titulaire'?'Titulaire':m==='delegue_suppleant'?'Suppléant':m==='eco_delegue'?'Éco':m.toUpperCase()}</th>`).join('')}</tr></thead>
+    <tbody>${l.map(x=>`<tr><td>${esc(x.nom)} ${esc(x.prenom)}</td>${entete.map(m=>{ const on=m==='pap'?x.pap:x.mandats.includes(m);
+      return `<td class="c"><button type="button" class="bascule" aria-pressed="${on}" aria-label="${esc(MQ[m].l)} : ${esc(x.nom)} ${esc(x.prenom)}" onclick="basculerRepere(this,'${a}','${k}','${x.id}','${m}')">${MQ[m].i}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+async function basculerRepere(btn,a,k,id,m){
+  const x=elevesDe(a,k).find(e=>e.id===id); if(!x) return;
+  const corps={id};
+  if(m==='pap') corps.pap=!x.pap; else corps.mandats=x.mandats.includes(m)?x.mandats.filter(v=>v!==m):x.mandats.concat([m]);
+  btn.disabled=true;
+  try{ const d=await api('projets/eleves',{methode:'PATCH',corps}); x.mandats=d.eleve.mandats; x.pap=d.eleve.pap;
+    btn.setAttribute('aria-pressed',m==='pap'?x.pap:x.mandats.includes(m)); }
+  catch(e){ toast(msgErr(e)); }
+  btn.disabled=false;
+}
+
 function vueAide(mc){
   pageTexte(mc,'Mode d’emploi','<em>Aide</em>',[
     ['Première connexion','<ul class="liste"><li>Votre compte est créé à partir de votre adresse @egd.mg.</li><li>« Se connecter », onglet « Première connexion » : vous recevez un lien, valable 24 heures, pour choisir votre mot de passe.</li><li>12 caractères au moins : une phrase de passe de plusieurs mots est le plus simple.</li><li>Personne d’autre que vous ne connaît votre mot de passe.</li></ul>'],

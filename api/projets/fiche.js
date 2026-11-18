@@ -8,6 +8,7 @@ import {
 } from '../_lib/projets.js';
 import { anneeCourante, anneeSuivante, anneeValide, archivee } from '../_lib/annee.js';
 import { journaliser } from '../_lib/journal.js';
+import { idsEleves, enregistrerEleves, idsDuProjet } from '../_lib/eleves.js';
 import {
   lire, ecrire, configuree, origineLegitime, refus, corps, UUID,
 } from '../_lib/supabase.js';
@@ -17,6 +18,8 @@ import {
 //                   réduite pour l'année courante et la précédente)
 //   POST            créer        { annee?, nom, categorie, ... }
 //   PATCH           modifier     { id, modifie_le?, ...champs modifiés }
+//   « eleves » (liste d'identifiants) : les élèves retenus, quand seuls
+//   certains élèves des classes indiquées sont concernés (_lib/eleves.js).
 // La mise à la corbeille passe par /api/projets/corbeille.
 
 async function fiche(id) {
@@ -60,6 +63,8 @@ export default async function handler(req, res) {
     const m = await appelant(req);
     if (!m) return refus(res, 401, 'Session expirée : reconnectez-vous.');
     const b = corps(req);
+    const eleves = 'eleves' in b ? idsEleves(b.eleves) : undefined;
+    if (eleves === null) return refus(res, 400, 'Liste d\'élèves invalide.');
 
     // ---------------------------------------------------------- création
     if (req.method === 'POST') {
@@ -82,6 +87,7 @@ export default async function handler(req, res) {
         modifie_par: m.id, modifie_le: maintenant,
       }, 'POST');
       if (valeurs.referents) await synchroniserReferents(p.id, valeurs.referents);
+      if (eleves?.length) await enregistrerEleves(p, eleves);
       await journaliser(req, m, 'add_project', `Nouveau projet: ${p.nom} (${p.code})`);
       await reArmer(req, res, m);
       return res.status(201).json({ ok: true, projet: await pourPage(p, m) });
@@ -120,13 +126,20 @@ export default async function handler(req, res) {
 
     const pareil = (a, b) => (a && typeof a === 'object' ? JSON.stringify(a) === JSON.stringify(b ?? {}) : a === b);
     const changes = Object.fromEntries(Object.entries(valeurs).filter(([k, v]) => !pareil(v, p[k])));
-    if (!Object.keys(changes).length) {
+    // Les élèves retenus : ceux envoyés, sinon ceux d'avant, recalculés quand
+    // les classes changent (retirer une classe retire ses élèves).
+    const tri = (l) => [...l].sort().join(',');
+    const avant = eleves !== undefined || 'classes' in changes ? await idsDuProjet(id) : [];
+    const elevesChangent = eleves !== undefined && tri(eleves) !== tri(avant);
+    if (!Object.keys(changes).length && !elevesChangent) {
       return res.status(200).json({ ok: true, inchange: true, projet: await pourPage(p, m) });
     }
     // modifie_le est posé par le trigger de la base, seulement si le contenu change.
-    const [apres] = await ecrire('projets', `id=eq.${id}&select=${CHAMPS_LUS}`,
-      { ...changes, modifie_par: m.id });
+    const [apres] = Object.keys(changes).length
+      ? await ecrire('projets', `id=eq.${id}&select=${CHAMPS_LUS}`, { ...changes, modifie_par: m.id })
+      : [p];
     if ('referents' in changes) await synchroniserReferents(id, changes.referents);
+    if (elevesChangent || 'classes' in changes) await enregistrerEleves(apres, eleves ?? avant);
     await journaliser(req, m, 'update_project', `Modification: ${apres.code} - ${apres.nom}`);
     await reArmer(req, res, m);
     return res.status(200).json({ ok: true, projet: await pourPage(apres, m) });

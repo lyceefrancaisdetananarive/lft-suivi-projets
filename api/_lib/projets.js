@@ -164,8 +164,10 @@ export function versPage(p, { origines = new Map(), droits = null } = {}) {
 //    le projet Vercel. Activé le 18/11/2026 : les collègues ont donné leur
 //    accord à la diffusion, l'outil sert aussi la communication du lycée.
 //    Sans la variable, les noms ne sortent pas (repli prudent) ;
-//  - jamais de nom d'élève : aucune colonne n'en porte. Les textes libres
-//    (description, objectifs) restent sous la responsabilité de leur auteur.
+//  - jamais de nom d'élève : les élèves retenus (tables eleves et
+//    projet_eleves) ne passent que par /api/projets/eleves, réservé aux
+//    personnels connectés. Les textes libres (description, objectifs)
+//    restent sous la responsabilité de leur auteur.
 // ---------------------------------------------------------------------
 
 export const nomsPublics = () => String(process.env.VITRINE_NOMS ?? '').trim().toLowerCase() === 'oui';
