@@ -12,6 +12,13 @@ if(/\.github\.io$/.test(location.hostname)){
 </script>
 <title>Projets et parcours : Lycée Français de Tananarive</title>
 <meta name="description" content="Les projets pédagogiques du Lycée Français de Tananarive et leur contribution aux parcours éducatifs des élèves.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:site_name" content="Lycée Français de Tananarive">
+<meta property="og:title" content="Les projets du Lycée Français de Tananarive">
+<meta property="og:description" content="Sorties, concours, partenariats, clubs : les projets que les équipes du lycée mènent avec les élèves, de la 6e à la terminale.">
+<meta property="og:image" content="https://projets-parcours-lft.vercel.app/logo-lft.jpg">
+<meta property="og:url" content="https://projets-parcours-lft.vercel.app/">
 <link rel="icon" type="image/jpeg" href="logo-lft.jpg">
 <style>
 @font-face{font-family:'Marianne';src:url('fonts/Marianne-Regular.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}
@@ -208,6 +215,20 @@ textarea.saisie{height:auto;padding:14px 16px;line-height:1.5;resize:vertical;fo
 .succes{padding:12px 16px;border-radius:12px;background:var(--ok-bg);color:var(--ok-fg);font-size:14px}
 
 /* Tableaux de bord */
+/* Vitrine publique */
+.vitrine-section{display:flex;flex-direction:column;gap:18px}
+.tete-section{display:flex;flex-direction:column;gap:6px}
+h2.titre-section{margin:0;font-family:var(--serif);font-weight:700;font-size:30px;line-height:1.15;color:var(--bleu)}
+.pa-tuiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.pa-tuile{display:flex;flex-direction:column;gap:6px;padding:20px;text-decoration:none;color:var(--encre);transition:transform .15s,box-shadow .15s}
+.pa-tuile:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(3,40,68,.10)}
+.pa-tuile strong{font-family:var(--serif);font-size:19px;line-height:1.25}
+.pa-tuile span{font-size:14px;color:var(--gris)}
+.pa-tuile small{margin-top:auto;padding-top:8px;font-size:13px;font-weight:700}
+.cnx-perso{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.cnx-perso>div{display:flex;flex-direction:column;gap:4px}
+.cnx-perso span{font-size:14px;color:var(--gris)}
+.axes3 small{margin-top:6px;font-size:13px;font-weight:700}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
 .kpi{padding:20px;display:flex;flex-direction:column;gap:4px}
 .kpi span{font-size:13px;color:var(--gris);font-weight:500}
@@ -305,6 +326,12 @@ tr.cliquable{cursor:pointer}
   .fab{display:flex;position:fixed;right:18px;bottom:96px;z-index:50;width:56px;height:56px;border-radius:50%;background:var(--magenta);align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(182,24,128,.35)}
   .fab svg{width:22px;height:22px}
   h1.titre,.fiche-tete h1{font-size:32px}
+  h2.titre-section{font-size:25px}
+  .kpis-vitrine{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .kpis-vitrine .kpi{padding:12px;border-radius:16px;justify-content:space-between}
+  .kpis-vitrine .kpi span{font-size:12px}
+  .kpis-vitrine .kpi strong{font-size:24px}
+  .kpis-vitrine .kpi small{display:none}
   .fiche-tete p{font-size:16px}
   .recherche{min-width:0;width:100%}
   .grille{grid-template-columns:1fr}
@@ -623,7 +650,7 @@ async function changerAnnee(a){
 function dessinerEntete(){
   const p=S.route.page;
   const lien=(h,id,t,ic)=>`<a href="${h}" ${p===id?'aria-current="page"':''}>${ic}<span>${t}</span></a>`;
-  $('nav').innerHTML=lien('#/','liste','Projets',IC.projets)+lien('#/tableau','tableau','Tableau de bord',IC.tableau)
+  $('nav').innerHTML=lien('#/','liste','Projets',IC.projets)+(S.user?lien('#/tableau','tableau','Tableau de bord',IC.tableau):'')
     +lien('#/parcours','parcours','Parcours',IC.parcours)+(estDirection()?lien('#/direction','direction','Direction',IC.direction):'');
   const annees=S.years.slice().sort().reverse();
   let h=`<label class="sr" for="sel-annee">Année scolaire</label><select class="annee-sel" id="sel-annee" onchange="changerAnnee(this.value)">${annees.map(a=>`<option value="${a}"${a===S.year?' selected':''}>${a}${a>S.currentYear?' (préparation)':''}</option>`).join('')}</select>`;
@@ -676,8 +703,10 @@ function voirMdp(b){ const i=b.parentElement.querySelector('input'); const v=i.t
 /* ═══════════════════════════════════════════════════════════
    RENDU
 ═══════════════════════════════════════════════════════════ */
+const TITRE_SITE='Projets et parcours : Lycée Français de Tananarive';
 function rendre(){
   S.route=lireRoute();
+  document.title=TITRE_SITE;
   dessinerEntete();
   const mc=$('mc'), r=S.route;
   if(!S.charge && ['liste','projet','tableau','parcours','direction','modifier'].includes(r.page)){
@@ -688,7 +717,7 @@ function rendre(){
     case 'projet': return vueFiche(mc,r.arg);
     case 'nouveau': return vueAssistant(mc);
     case 'modifier': return vueModifier(mc,r.arg);
-    case 'tableau': return vueTableau(mc);
+    case 'tableau': if(!S.user){ location.hash='#/'; return; } return vueTableau(mc);
     case 'parcours': return vueParcours(mc);
     case 'direction': return vueDirection(mc);
     case 'corbeille': return vueCorbeille(mc);
@@ -702,11 +731,11 @@ function rendre(){
 
 /* ── 1. Liste des projets ── */
 function vueListe(mc){
+  if(!S.user) return vueVitrine(mc);
   const ps=S.projets, enCours=ps.filter(p=>p.statut==='en_cours').length, phares=ps.filter(p=>p.phare).length;
   const resume = S.erreur ? 'La liste est momentanément indisponible.'
     : ps.length ? `${pluriel(ps.length,'projet')} en ${S.year}, dont ${enCours} en cours${phares?' et '+pluriel(phares,'projet phare','projets phares'):''}.`
     : `Aucun projet saisi pour ${S.year} pour l'instant.`;
-  const vitrine = !S.user ? `<div class="bandeau vitrine">${IC.info}<span>Vous consultez la présentation publique des projets du lycée : année en cours et année précédente. Les personnels du lycée se connectent avec leur adresse egd.mg pour saisir et suivre leurs projets.</span></div>` : '';
   mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px">
     <div class="tete-page"><div>
       <span class="surtitre">Année scolaire ${esc(S.year)}</span>
@@ -714,7 +743,6 @@ function vueListe(mc){
       <p class="chapo" id="liste-resume">${esc(resume)}</p>
     </div>
     <label class="recherche">${IC.loupe}<span class="sr">Rechercher un projet</span><input type="search" id="q" value="${esc(S.filtres.q)}" placeholder="Rechercher un projet, un niveau, une discipline" oninput="S.filtres.q=this.value;dessinerGrille()"></label></div>
-    ${vitrine}
     <div class="filtres">
       <div class="puces" role="group" aria-label="Filtrer par catégorie" id="f-cat"></div>
       <div class="seg" role="group" aria-label="Filtrer par état" id="f-st"></div>
@@ -736,6 +764,57 @@ function dessinerGrille(){
     : `<div class="carte vide">${S.projets.length?'Aucun projet ne correspond à ces filtres.':'Aucun projet pour cette année.'}${peutCreer()?`<div style="margin-top:16px"><a class="btn btn-accent" href="#/nouveau">${IC.plus}Créer le premier projet</a></div>`:''}</div>`;
 }
 
+/* ── 1 bis. Vitrine publique : ce que voient les parents, le réseau et les visiteurs.
+   Le pilotage (tableau de bord, manques à combler) reste réservé aux personnels. ── */
+function niveauxTouches(ps){ const t=new Set(); ps.forEach(p=>niveauxDe(p.niveaux).forEach(n=>t.add(n))); return NIVEAUX.filter(n=>t.has(n)); }
+function vueVitrine(mc){
+  const ps=S.projets, passee=S.year<S.currentYear;
+  const enCours=ps.filter(p=>p.statut==='en_cours').length, phares=ps.filter(p=>p.phare);
+  const nivs=niveauxTouches(ps), college=nivs.some(n=>NIVEAUX.indexOf(n)<4), lycee=nivs.some(n=>NIVEAUX.indexOf(n)>=4);
+  const paN=Object.fromEntries(Object.keys(PA).map(k=>[k,ps.filter(p=>(p.parcours||{})[k]).length]));
+  const paPresents=Object.keys(PA).filter(k=>paN[k]).length;
+  const avecPart=ps.filter(p=>String(p.partenariats||'').trim()).length;
+  const chapo = passee
+    ? `Les projets que les équipes du lycée ont menés avec les élèves en ${S.year}, de la 6e à la terminale.`
+    : 'Sorties, concours, partenariats, clubs : les projets que les équipes du lycée mènent avec les élèves cette année, de la 6e à la terminale.';
+  const chiffres = ps.length ? `<div class="kpis kpis-vitrine">
+      <div class="carte kpi"><span>Projets</span><strong>${ps.length}</strong><small>${passee?'menés en '+esc(S.year):(enCours?pluriel(enCours,'projet en cours','projets en cours'):'pour l\'année '+esc(S.year))}</small></div>
+      <div class="carte kpi"><span>Niveaux concernés</span><strong>${nivs.length} sur ${NIVEAUX.length}</strong><small>${college&&lycee?'au collège et au lycée':college?'au collège':lycee?'au lycée':'niveaux à préciser'}</small></div>
+      ${paPresents?`<div class="carte kpi"><span>Parcours éducatifs</span><strong>${paPresents} sur 4</strong><small>nourris par les projets</small></div>`
+        :(avecPart?`<div class="carte kpi"><span>Partenariats</span><strong>${avecPart}</strong><small>${avecPart>1?'projets menés avec des partenaires':'projet mené avec des partenaires'}</small></div>`:'')}
+    </div>` : '';
+  mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:40px">
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="tete-page"><div>
+        <span class="surtitre">Année scolaire ${esc(S.year)}</span>
+        <h1 class="titre">Les projets du <em>lycée</em></h1>
+        <p class="chapo">${esc(chapo)}</p>
+      </div></div>
+      ${S.erreur?'':chiffres}
+    </div>
+    ${phares.length?`<section class="vitrine-section"><div class="tete-section"><span class="surtitre">À la une</span><h2 class="titre-section">${phares.length>1?'Les projets <em>phares</em>':'Le projet <em>phare</em>'}</h2></div><div class="grille">${phares.map(carteProjet).join('')}</div></section>`:''}
+    ${ps.length?`<section class="vitrine-section"><div class="tete-section"><span class="surtitre">Les parcours éducatifs</span><h2 class="titre-section">Ce que les projets apportent aux <em>élèves</em></h2><p class="chapo">De la 6e à la terminale, quatre parcours éducatifs définis par l'Éducation nationale accompagnent chaque élève. Les projets du lycée les font vivre.</p></div>
+      <div class="pa-tuiles">${Object.keys(PA).map(k=>`<a class="carte pa-tuile" href="#/parcours" onclick="S.paChoisi='${k}'" style="border-top:4px solid ${PA[k].fg}"><strong style="color:${PA[k].fg}">${esc(PA[k].nom)}</strong><span>${esc(PA[k].texte)}</span><small style="color:${PA[k].fg}">${paN[k]?pluriel(paN[k],'projet'):'Découvrir ce parcours'}</small></a>`).join('')}</div></section>`:''}
+    <section class="vitrine-section">
+      <div class="tete-page"><div class="tete-section"><span class="surtitre">${esc(S.year)}</span><h2 class="titre-section">Tous les <em>projets</em></h2></div>
+        <label class="recherche">${IC.loupe}<span class="sr">Rechercher un projet</span><input type="search" id="q" value="${esc(S.filtres.q)}" placeholder="Rechercher un projet, un niveau, une discipline" oninput="S.filtres.q=this.value;dessinerGrille()"></label></div>
+      <div class="filtres">
+        <div class="puces" role="group" aria-label="Filtrer par catégorie" id="f-cat"></div>
+        <div class="seg" role="group" aria-label="Filtrer par état" id="f-st"></div>
+      </div>
+      <div id="grille"></div>
+    </section>
+    <div class="carte bloc cnx-perso"><div><strong>Vous faites partie de l'équipe du lycée ?</strong><span>Connectez-vous avec votre adresse egd.mg pour saisir et suivre vos projets.</span></div><button class="btn btn-bleu" onclick="ouvrirConnexion()">Se connecter</button></div>
+  </div>`;
+  dessinerGrille();
+}
+async function partager(){
+  const url=location.href;
+  if(navigator.share){ try{ await navigator.share({title:document.title,url}); }catch(e){} return; }
+  try{ await navigator.clipboard.writeText(url); toast('Lien copié : il ne reste qu\'à le coller dans un message.'); }
+  catch(e){ toast("Copiez l'adresse de la page pour la partager."); }
+}
+
 /* ── 2. Fiche ── */
 function vueFiche(mc,code){
   const p=projetParCode(code);
@@ -748,6 +827,14 @@ function vueFiche(mc,code){
   const nivs=niveauxDe(p.niveaux);
   const discs=String(p.disciplines||'').split(/\s*[,;]\s*/).filter(Boolean);
   const dir=estDirection();
+  document.title=p.nom+' : '+TITRE_SITE;
+  // Pour le visiteur, on tait les cases encore vides plutôt que d'afficher « À préciser ».
+  const eq=equipe(p);
+  const reperes=[];
+  if(S.user||p.date_debut||p.date_fin) reperes.push(['Période',periode(p)]);
+  if(S.user||p.niveaux) reperes.push(['Niveaux',p.niveaux||'À préciser']);
+  if(S.user||eq) reperes.push([p.referents?'Équipe':(S.user?'Disciplines':'Équipe pédagogique'),eq||'À préciser']);
+  const autres=S.projets.filter(x=>x.code!==p.code&&x.categorie===p.categorie).slice(0,3);
   const actions=[];
   if(p.peut_modifier) actions.push(`<a class="btn btn-bleu" href="#/modifier/${encodeURIComponent(p.code)}">Modifier</a>`);
   if(peutReconduire()) actions.push(`<button class="btn btn-clair" onclick="reconduire('${jsq(p.code)}')">Reconduire en ${esc(cibleReconduction())}</button>`);
@@ -763,9 +850,7 @@ function vueFiche(mc,code){
       ${p.description?`<p>${esc(p.description)}</p>`:''}
     </div>
     <div class="reperes">
-      <div><span>Période</span><strong>${esc(periode(p))}</strong></div>
-      <div><span>Niveaux</span><strong>${esc(p.niveaux||'À préciser')}</strong></div>
-      <div><span>${p.referents?'Équipe':'Disciplines'}</span><strong>${esc(equipe(p)||'À préciser')}</strong></div>
+      ${reperes.map(([l,v])=>`<div><span>${esc(l)}</span><strong>${esc(v)}</strong></div>`).join('')}
       ${axe?`<div><span>Axe du projet d'établissement</span><strong>Axe ${axe.n} : ${esc(axe.t)}${p.sous_axe?' ('+esc(p.sous_axe)+')':''}</strong></div>`:(p.echelle?`<div><span>Échelle</span><strong>${esc(p.echelle)}</strong></div>`:'')}
     </div>
     <div class="deux-col">
@@ -779,17 +864,18 @@ function vueFiche(mc,code){
         ${!objectifs.length&&!p.partenariats&&!S.user?`<section class="carte bloc"><p class="txt">Fiche en cours de rédaction par l'équipe.</p></section>`:''}
       </div>
       <aside class="cote">
-        <section class="carte bloc"><h2>Parcours éducatifs</h2>
+        ${pas.length||S.user?`<section class="carte bloc"><h2>Parcours éducatifs</h2>
           ${pas.length?pas.map(([k,ax])=>`<div class="pa-bloc" style="background:${PA[k].bg}"><strong style="color:${PA[k].fg}">${esc(PA[k].nom)}</strong><span>${ax.map(i=>esc(PA[k].axes[i][0])).join(', ')}</span></div>`).join('')
-            +(nivs.length?`<span class="aide">Compté dans la couverture des parcours pour : ${nivs.join(', ')}.</span>`:'')
+            +(S.user&&nivs.length?`<span class="aide">Compté dans la couverture des parcours pour : ${nivs.join(', ')}.</span>`:'')
             :`<p class="txt">Aucun parcours indiqué pour l'instant.</p>`}
-        </section>
-        ${discs.length?`<section class="carte bloc"><h2>Disciplines</h2><div class="puces" style="gap:6px">${discs.map(d=>`<span class="niv">${esc(d)}</span>`).join('')}</div></section>`:''}
+        </section>`:''}
+        ${discs.length&&p.referents?`<section class="carte bloc"><h2>Disciplines</h2><div class="puces" style="gap:6px">${discs.map(d=>`<span class="niv">${esc(d)}</span>`).join('')}</div></section>`:''}
         ${p.valorisation?`<section class="carte bloc"><h2>Valorisation</h2><p class="txt">${esc(p.valorisation)}</p></section>`:''}
         ${p.reconduit_de?`<section class="carte bloc"><h2>Historique</h2><p class="txt">Reconduit du projet ${esc(p.reconduit_de.code)} de ${esc(p.reconduit_de.annee)}.</p></section>`:''}
       </aside>
     </div>
-    ${S.user?`<div class="actions-fiche verre">${actions.join('')}</div>`:''}
+    ${autres.length?`<section class="vitrine-section"><div class="tete-section"><span class="surtitre">${esc(CAT[p.categorie]?CAT[p.categorie].l:'')}</span><h2 class="titre-section">D'autres projets de la même <em>catégorie</em></h2></div><div class="grille">${autres.map(carteProjet).join('')}</div></section>`:''}
+    <div class="actions-fiche verre">${S.user?actions.join(''):`<button class="btn btn-bleu" onclick="partager()">Partager ce projet</button><button class="btn btn-clair" onclick="window.print()">Imprimer ou PDF</button>`}</div>
   </div>`;
   if(S.user) chargerCommentaires(p.id);
 }
@@ -1136,7 +1222,22 @@ function vueTableau(mc){
 }
 
 /* ── 6. Parcours ── */
+function vueParcoursPublic(mc){
+  const k=S.paChoisi||'S', P=PA[k], passee=S.year<S.currentYear;
+  const ps=S.projets.filter(p=>(p.parcours||{})[k]);
+  const parAxe=P.axes.map((a,i)=>ps.filter(p=>(p.parcours[k]||[]).includes(i)).length);
+  mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px">
+    <div class="tete-page"><div><span class="surtitre">Année scolaire ${esc(S.year)}</span><h1 class="titre">Les parcours <em>éducatifs</em></h1><p class="chapo">De la 6e à la terminale, quatre parcours définis par l'Éducation nationale accompagnent chaque élève. Voici les projets du lycée qui les ${passee?'ont fait vivre en '+esc(S.year):'font vivre cette année'}.</p></div></div>
+    <div class="onglets" role="tablist" aria-label="Parcours">${Object.keys(PA).map(x=>`<button type="button" role="tab" aria-selected="${x===k}" style="${x===k?`border-color:${PA[x].fg};background:${PA[x].bg}`:''}" onclick="S.paChoisi='${x}';vueParcours($('mc'))"><strong>${PA_ONGLET[x]}</strong><span>${esc(PA[x].texte)}</span></button>`).join('')}</div>
+    <section class="carte bloc"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline"><h2 style="color:${P.fg}">${esc(P.nom)}</h2><span class="aide">${esc(P.ref)}</span></div>
+      <div class="axes3">${P.axes.map((a,i)=>`<div style="background:${P.bg}"><strong>${esc(a[0])}</strong><span>${esc(a[1])}</span>${parAxe[i]?`<small style="color:${P.fg}">${pluriel(parAxe[i],'projet')}</small>`:''}</div>`).join('')}</div></section>
+    <section class="vitrine-section"><div class="tete-section"><span class="surtitre">${esc(PA_ONGLET[k])}</span><h2 class="titre-section">Les projets qui y <em>contribuent</em></h2></div>
+      ${ps.length?`<div class="grille">${ps.map(carteProjet).join('')}</div>`:`<div class="carte vide">Aucun projet n'est encore rattaché à ce parcours pour ${esc(S.year)}.</div>`}
+    </section>
+  </div>`;
+}
 function vueParcours(mc){
+  if(!S.user) return vueParcoursPublic(mc);
   const k=S.paChoisi||'S', P=PA[k], niv=S.nivChoisi||'6e';
   const ligne=(nv)=>`<tr class="cliquable${nv===niv?' choisi':''}" onclick="S.nivChoisi='${nv}';vueParcours($('mc'))"><th scope="row">${nv}</th>${P.axes.map((ax,i)=>caseCouverture(compte(k,i,nv),P)).join('')}</tr>`;
   const manques=P.axes.map((ax,i)=>[ax[0],NIVEAUX.filter(nv=>!compte(k,i,nv))]);
@@ -1385,7 +1486,7 @@ function vueMentions(mc){
     ['Éditeur','<p class="txt">Lycée Français de Tananarive, établissement en gestion directe de l’Agence pour l’enseignement français à l’étranger, Antananarivo, Madagascar.</p>'],
     ['Hébergement','<p class="txt">Site et fonctions serveur : Vercel Inc., exécution à Francfort. Base de données et authentification : Supabase Inc., région de Francfort (Union européenne).</p>'],
     ['Données personnelles','<p class="txt">Pour les personnels : nom, prénom, adresse @egd.mg et rôle, pour l’authentification et les droits. Les mots de passe ne sont jamais conservés en clair. Le journal d’activité enregistre les actions, avec le pays et la ville approximatifs, le système et le navigateur ; l’adresse IP n’est pas conservée. Il n’est consultable que par la direction et l’administrateur de l’application. Un cookie de session strictement nécessaire est déposé à la connexion. Aucune donnée n’est transmise à des tiers. Aucune donnée d’élève n’est enregistrée. Droits d’accès, de rectification et d’effacement : s’adresser à l’administrateur de l’application.</p>'],
-    ['Présentation publique','<p class="txt">Les visiteurs non connectés voient les projets de l’année en cours et de l’année précédente, sans les moyens, les échanges internes ni les noms des collègues, sauf décision contraire de la direction.</p>'],
+    ['Présentation publique','<p class="txt">Les visiteurs non connectés voient les projets de l’année en cours et de l’année précédente, sans les moyens, les échanges internes ni les noms des collègues, sauf décision contraire de la direction. Aucun nom d’élève n’y figure.</p>'],
   ]);
 }
 
