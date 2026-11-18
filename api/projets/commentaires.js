@@ -5,8 +5,8 @@ import {
 } from '../_lib/supabase.js';
 
 // Les commentaires d'une fiche.
-//   GET  ?projet=...                lecture, publique comme sur l'ancienne
-//                                   plateforme (nom de l'auteur, jamais son adresse)
+//   GET  ?projet=...                lecture, par une personne connectée : ce sont
+//                                   des échanges internes, hors de la vitrine
 //   POST { projet, texte }          ajout, par une personne connectée
 
 export default async function handler(req, res) {
@@ -15,10 +15,12 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const id = String(req.query?.projet ?? '');
       if (!UUID.test(id)) return refus(res, 400, 'Identifiant invalide.');
+      const lecteur = await appelant(req);
+      if (!lecteur) return refus(res, 401, 'Connectez-vous pour lire les commentaires.');
       const p = (await lire('projets', `id=eq.${id}&select=id,supprime_le`))[0];
       if (!p) return refus(res, 404, 'Projet introuvable.');
-      // Une fiche à la corbeille n'est plus publique, ses commentaires non plus.
-      if (p.supprime_le && !estDirection(await appelant(req))) return refus(res, 404, 'Projet introuvable.');
+      // Une fiche à la corbeille : ses commentaires restent à la direction.
+      if (p.supprime_le && !estDirection(lecteur)) return refus(res, 404, 'Projet introuvable.');
       const l = await lire('commentaires',
         `projet_id=eq.${id}&select=id,auteur_nom,texte,cree_le&order=cree_le.desc,id.desc&limit=500`);
       return res.status(200).json({ ok: true, commentaires: l });

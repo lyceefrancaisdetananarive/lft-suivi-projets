@@ -1649,8 +1649,8 @@ const S = {
 function isArchive(){ return S.year < S.currentYear; }
 /* Année cible pour création/reconduction : l'année courante (ou future si on la consulte). */
 function editableYear(){ return S.year >= S.currentYear ? S.year : S.currentYear; }
-/* Droit d'écrire dans l'année consultée (archive → admin uniquement). */
-function canWriteYear(){ return !isArchive() || (S.user && S.user.role==='admin'); }
+/* Droit d'écrire dans l'année consultée (archive : administrateur et direction). */
+function canWriteYear(){ return !isArchive() || estDirection(); }
 /* Année scolaire suivante : "2025-2026" → "2026-2027". */
 function nextSchoolYear(y){ const [a,b]=(y||S.year).split('-').map(Number); return a+1+'-'+(b+1); }
 /* Année cible d'une reconduction : depuis une archive → l'année courante (cas de la
@@ -2027,8 +2027,8 @@ function updateArchiveBar(){
   const bar=document.getElementById('archive-bar');
   if(!bar) return;
   if(isArchive()){
-    const suite = (S.user && S.user.role==='admin')
-      ? " En tant qu'administrateur, vous pouvez encore la modifier."
+    const suite = estDirection()
+      ? " La direction et l'administrateur peuvent encore la modifier."
       : (canReconduct()
           ? ` Les fiches ne sont plus modifiables, mais vous pouvez reprendre un projet pour ${esc(S.currentYear)}.`
           : " Les projets y sont consultables mais non modifiables.");
@@ -2068,7 +2068,7 @@ function updateHeader(){
     pill.style.display='flex';
     bl.style.display='none'; bo.style.display='';
     document.getElementById('user-name-nav').textContent=(S.user.prenom||'')+' '+(S.user.nom||'');
-    const roleL={admin:'Admin',direction:'Direction',vie_scolaire:'Vie scolaire',enseignant:'Enseignant'};
+    const roleL={admin:"Administrateur de l'application",direction:'Direction',vie_scolaire:'Vie scolaire',enseignant:'Enseignant'};
     const roleC={admin:'rt-admin',direction:'rt-dir',vie_scolaire:'rt-vs',enseignant:'rt-teacher'};
     const rEl=document.getElementById('user-role-nav');
     rEl.textContent=roleL[S.user.role]||S.user.role;
@@ -2343,7 +2343,7 @@ function renderDashboard(){
   const cnt={};
   Object.keys(CATS).forEach(k=>cnt[k]=0);
   ps.forEach(p=>{ if(cnt[p.Categorie]!==undefined)cnt[p.Categorie]++; });
-  const isAdmin=S.user&&S.user.role==='admin';
+  const isAdmin=estDirection();
   const isAdDir=S.user&&(S.user.role==='admin'||S.user.role==='direction');
 
   mc.innerHTML=`
@@ -3573,7 +3573,7 @@ function renderInternat(mc){
    quelqu'un, c'est lui créer son compte ; il choisit son mot de passe par le lien
    « Première connexion ». La sauvegarde est assurée par Supabase.
    Changer un rôle ou supprimer un compte redemande le mot de passe de l'administrateur. */
-const ROLE_L={admin:'admin', direction:'direction', vie_scolaire:'vie scolaire', enseignant:'enseignant', eleve:'élève'};
+const ROLE_L={admin:"administrateur de l'application", direction:'direction', vie_scolaire:'vie scolaire', enseignant:'enseignant', eleve:'élève'};
 
 /* Fenêtre de ressaisie du mot de passe. Renvoie le mot de passe, ou null si annulé. */
 function demanderMotDePasse(titre, message){
@@ -3603,7 +3603,7 @@ function demanderMotDePasse(titre, message){
 }
 
 async function renderAdmin(mc){
-  if(!S.user||S.user.role!=='admin'){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à l'administrateur.</p></div>`; return; }
+  if(!estDirection()){ mc.innerHTML=`<div class="empty"><span class="empty-icon">🔒</span><p>Accès réservé à la direction et à l'administrateur.</p></div>`; return; }
   const entete=`<div class="sec-hd"><div class="sec-title"><i class="ph-bold ph-gear-six" style="vertical-align:middle;margin-right:.3rem"></i> Administration</div><button class="btn btn-back" onclick="showDashboard()">← Accueil</button></div>`;
   mc.innerHTML=entete+`<div class="loader"><div class="spin"></div> Chargement…</div>`;
   // Chaque appel est isolé : un échec ne masque pas l'autre carte.
@@ -3626,8 +3626,9 @@ async function renderAdmin(mc){
         <div class="admin-card">
           <div class="admin-card-hd"><i class="ph ph-users-three" style="margin-right:.3rem"></i> Comptes <small>${us.length} comptes${enAttente?' · '+enAttente+' sans mot de passe choisi':''}</small></div>
           ${us.map(u=>{
-            const isSelf=u.email===(S.user&&S.user.email);
-            const roleOpts=['enseignant','vie_scolaire','direction','admin'].map(r=>`<option value="${r}"${r===u.role?' selected':''}>${ROLE_L[r]}</option>`).join('');
+            const isSelf=u.email===(S.user&&S.user.email)
+              || (u.role==='admin' && S.user.role!=='admin'); /* la direction ne touche pas au compte de l'administrateur */
+            const roleOpts=['enseignant','vie_scolaire','direction'].concat(u.role==='admin'||S.user.role==='admin'?['admin']:[]).map(r=>`<option value="${r}"${r===u.role?' selected':''}>${ROLE_L[r]}</option>`).join('');
             const inactif=!u.actif;
             return `<div class="row-item" style="flex-wrap:wrap;gap:.4rem .6rem${inactif?';opacity:.55':''}">
               <div class="row-info" style="flex:1;min-width:0">
@@ -3781,8 +3782,7 @@ function renderTutoriel(mc){
     <div class="info-card"><h2>Droits d'accès</h2><ul>
       <li><strong>Enseignant :</strong> crée des projets, modifie ceux qu'il a créés ou dont il est référent · peut demander la suppression de son compte</li>
       <li><strong>Vie scolaire :</strong> crée, modifie et supprime les projets « Clubs et activités » et « Projets de l'Internat »</li>
-      <li><strong>Direction :</strong> crée, modifie, verrouille et supprime tous les projets · prépare l'année suivante</li>
-      <li><strong>Administrateur :</strong> accès complet : projets, comptes, journal d'activité</li>
+      <li><strong>Direction et administrateur de l'application :</strong> accès complet : tous les projets, années archivées, verrouillage, corbeille, préparation de l'année suivante, comptes et journal d'activité</li>
       <li>Un projet verrouillé par la direction ne se modifie plus que par elle</li>
     </ul></div>
     <div class="info-card"><h2>Mot de passe oublié</h2><ul>

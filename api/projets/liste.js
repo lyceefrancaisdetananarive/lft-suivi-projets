@@ -1,11 +1,14 @@
 import { appelant, peutModifier, peutCreer, referentDe } from '../_lib/autorisation.js';
-import { CATEGORIES, CHAMPS_LUS, versPage, originesDe } from '../_lib/projets.js';
+import {
+  CATEGORIES, CHAMPS_LUS, versPage, versPublic, anneesPubliques, originesDe,
+} from '../_lib/projets.js';
 import { anneeCourante, anneeValide, archivee } from '../_lib/annee.js';
 import { lireTout, configuree, refus } from '../_lib/supabase.js';
 
-// La liste des projets d'une année, hors corbeille. PUBLIQUE, comme sur
-// l'ancienne plateforme : un visiteur non connecté consulte les fiches.
-// Elle ne porte aucune adresse ni aucun identifiant de compte. À une
+// La liste des projets d'une année, hors corbeille. PUBLIQUE pour l'année
+// courante et la précédente : un visiteur non connecté consulte la vitrine,
+// sous la forme réduite de versPublic (voir _lib/projets.js). Elle ne porte
+// aucune adresse ni aucun identifiant de compte. À une
 // personne connectée, chaque fiche dit en plus si elle peut la modifier :
 // la page n'a pas à recalculer les droits, et ne le pourrait pas.
 export default async function handler(req, res) {
@@ -17,6 +20,9 @@ export default async function handler(req, res) {
 
   try {
     const m = await appelant(req);
+    if (!m && !anneesPubliques(anneeCourante()).includes(annee)) {
+      return refus(res, 401, 'Connectez-vous pour consulter les années plus anciennes.');
+    }
     const projets = await lireTout('projets',
       `annee=eq.${annee}&supprime_le=is.null&select=${CHAMPS_LUS}&order=code`);
     const refs = m ? await referentDe(m.id, projets.map((p) => p.id)) : new Set();
@@ -31,10 +37,13 @@ export default async function handler(req, res) {
       // cette année : vide pour un visiteur, ou pour une année archivée.
       categories_autorisees: m
         ? Object.keys(CATEGORIES).filter((c) => peutCreer(m, annee, c)) : [],
-      projets: projets.map((p) => versPage(p, {
-        origines,
-        droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)) } : null,
-      })),
+      projets: projets.map((p) => {
+        const f = versPage(p, {
+          origines,
+          droits: m ? { peut_modifier: peutModifier(m, p, refs.has(p.id)) } : null,
+        });
+        return m ? f : versPublic(f);
+      }),
     });
   } catch (e) {
     console.error('projets/liste :', e.message);

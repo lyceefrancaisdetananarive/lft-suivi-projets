@@ -1,5 +1,5 @@
 import {
-  appelant, estAdmin, reArmer, ressaisieAutorisee, noterEchecRessaisie, FENETRE_MINUTES,
+  appelant, estAdmin, estDirection, reArmer, ressaisieAutorisee, noterEchecRessaisie, FENETRE_MINUTES,
 } from '../_lib/autorisation.js';
 import { envoyerLienSiPossible } from '../_lib/lien.js';
 import { journaliser } from '../_lib/journal.js';
@@ -9,7 +9,8 @@ import {
   MESSAGE_SATURATION,
 } from '../_lib/supabase.js';
 
-// La gestion des comptes, par l'administrateur seul.
+// La gestion des comptes, par l'administrateur et la direction (qui ne
+// touche pas au compte de l'administrateur).
 //   GET                                   liste des comptes
 //   POST   { email, role, nom, prenom, envoyer_lien? }       créer un compte
 //   PATCH  { id, actif?, nom?, prenom?, envoyer_lien? }      modifier
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
     if (req.method !== 'GET' && !origineLegitime(req)) return refus(res, 403, 'Origine non autorisée.');
     const m = await appelant(req);
     if (!m) return refus(res, 401, 'Session expirée : reconnectez-vous.');
-    if (!estAdmin(m)) return refus(res, 403, "Réservé à l'administrateur.");
+    if (!estDirection(m)) return refus(res, 403, "Réservé à la direction et à l'administrateur.");
 
     if (req.method === 'GET') {
       const l = await lireTout('membres',
@@ -95,6 +96,10 @@ export default async function handler(req, res) {
     if (!UUID.test(id)) return refus(res, 400, 'Identifiant invalide.');
     const cible = (await lire('membres', `id=eq.${id}&select=id,email,role,nom,prenom,actif`))[0];
     if (!cible) return refus(res, 404, 'Compte introuvable.');
+    // La direction gère tous les comptes, sauf celui de l'administrateur.
+    if (cible.role === 'admin' && !estAdmin(m)) {
+      return refus(res, 403, "Seul l'administrateur de l'application modifie son propre compte.");
+    }
 
     // ---------------------------------------------------------- suppression
     if (req.method === 'DELETE') {

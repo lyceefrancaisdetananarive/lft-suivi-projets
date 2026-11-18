@@ -124,6 +124,36 @@ export function versPage(p, { origines = new Map(), droits = null } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------
+// LA VITRINE PUBLIQUE (visiteurs non connectés : parents, réseau AEFE,
+// collègues d'autres établissements). Décision du 18/11/2026 :
+//  - l'année courante et l'année précédente seulement ;
+//  - ni moyens ni budget (ressources), ni priorité, ni auteur, ni date de
+//    saisie : ce sont des éléments de travail internes ;
+//  - les noms des enseignants référents seulement si VITRINE_NOMS vaut
+//    « oui » dans le projet Vercel. Par défaut, ils ne sortent pas : leur
+//    publication attend l'accord de la direction et l'information des
+//    collègues ;
+//  - jamais de nom d'élève : aucune colonne n'en porte. Les textes libres
+//    (description, objectifs) restent sous la responsabilité de leur auteur.
+// ---------------------------------------------------------------------
+
+export const nomsPublics = () => String(process.env.VITRINE_NOMS ?? '').trim().toLowerCase() === 'oui';
+
+/** Les années ouvertes au public : l'année courante et la précédente. */
+export function anneesPubliques(courante) {
+  const [a, b] = courante.split('-').map(Number);
+  return [`${a - 1}-${b - 1}`, courante];
+}
+
+/** La forme publique d'une fiche, à partir de la forme versPage. */
+export function versPublic(f) {
+  const {
+    ressources, priorite, cree_par_nom, cree_le, modifie_le, referents, ...reste
+  } = f;
+  return { ...reste, referents: nomsPublics() ? referents : null };
+}
+
 /** Les projets d'origine des reconductions présentes dans `projets`. */
 export async function originesDe(projets) {
   const ids = [...new Set(projets.map((p) => p.reconduit_de).filter(Boolean))];

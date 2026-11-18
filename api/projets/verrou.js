@@ -23,8 +23,8 @@ export default async function handler(req, res) {
     const verrouiller = b.verrouiller === true;
     const p = (await lire('projets', `id=eq.${id}&select=id,annee,code,nom,supprime_le,verrouille_le`))[0];
     if (!p || p.supprime_le) return refus(res, 404, 'Projet introuvable.');
-    if (archivee(p.annee) && m.role !== 'admin') {
-      return refus(res, 403, "Cette année est archivée (lecture seule). Seul l'administrateur peut la modifier.");
+    if (archivee(p.annee) && !estDirection(m)) {
+      return refus(res, 403, "Cette année est archivée (lecture seule).");
     }
     if (Boolean(p.verrouille_le) === verrouiller) {
       return res.status(200).json({ ok: true, inchange: true });

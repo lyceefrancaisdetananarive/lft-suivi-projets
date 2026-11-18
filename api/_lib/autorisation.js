@@ -3,14 +3,18 @@
 // exactement le genre de contrôle qu'on oublie de recopier dans le
 // troisième fichier.
 //
-// LES DROITS (repris de l'ancienne plateforme, Code.gs v7.4) :
-//  - admin        : tout, y compris les années archivées et les comptes ;
-//  - direction    : tous les projets de l'année, corbeille, verrouillage,
-//                   ouverture de l'année suivante ;
+// LES DROITS (décision du 18/11/2026 : la direction a les mêmes accès que
+// l'administrateur de l'application) :
+//  - admin        : l'administrateur de l'application. Tout : projets,
+//                   années archivées, comptes, journal complet ;
+//  - direction    : les mêmes accès, à une réserve près : elle ne touche
+//                   pas au compte de l'administrateur (sinon une erreur de
+//                   manipulation suffirait à fermer l'application) ;
 //  - vie_scolaire : projets des catégories CLUB et INT ;
 //  - enseignant   : ses projets, et ceux dont il est référent ;
 //  - eleve        : rien pour l'instant (suivi de parcours, plus tard).
-// Une année antérieure à l'année courante est en lecture seule, sauf admin.
+// Une année antérieure à l'année courante est en lecture seule, sauf pour
+// l'administrateur et la direction.
 //
 // DEUX RÈGLES DURCIES par rapport à l'ancienne plateforme :
 //  - un projet verrouillé ne peut plus être mis à la corbeille que par
@@ -46,7 +50,9 @@ export function roleTenable(m) {
   return adminsAutorises().includes(String(m.email ?? '').toLowerCase());
 }
 
+/** L'administrateur de l'application, seul : la garde de son propre compte. */
 export const estAdmin = (m) => m?.role === 'admin';
+/** Administrateur OU direction : tous les gestes de pilotage, comptes et journal compris. */
 export const estDirection = (m) => m?.role === 'admin' || m?.role === 'direction';
 export const CATS_VIE_SCOLAIRE = ['CLUB', 'INT'];
 
@@ -57,7 +63,7 @@ export function nomAffiche(m) {
 /** Peut-il écrire dans cette année ? */
 export function peutEcrireAnnee(m, annee) {
   if (!m || m.role === 'eleve') return false;
-  return !archivee(annee) || estAdmin(m);
+  return !archivee(annee) || estDirection(m);
 }
 
 /** Peut-il créer un projet de cette catégorie dans cette année ? */

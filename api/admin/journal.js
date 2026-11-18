@@ -1,7 +1,7 @@
-import { appelant, estAdmin } from '../_lib/autorisation.js';
+import { appelant, estDirection } from '../_lib/autorisation.js';
 import { lire, configuree, refus } from '../_lib/supabase.js';
 
-// Le journal, du plus récent au plus ancien, par l'administrateur seul.
+// Le journal, du plus récent au plus ancien : administrateur et direction.
 // GET ?limite=500 (2 000 au plus)
 export default async function handler(req, res) {
   if (req.method !== 'GET') return refus(res, 405, 'Méthode non autorisée.');
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   try {
     const m = await appelant(req);
     if (!m) return refus(res, 401, 'Session expirée : reconnectez-vous.');
-    if (!estAdmin(m)) return refus(res, 403, "Réservé à l'administrateur.");
+    if (!estDirection(m)) return refus(res, 403, "Réservé à la direction et à l'administrateur.");
     const limite = Math.min(2000, Math.max(1, Number.parseInt(req.query?.limite, 10) || 500));
     const lignes = await lire('journal',
       'select=quand,email,role,action,detail,pays,ville,os,navigateur,appareil'

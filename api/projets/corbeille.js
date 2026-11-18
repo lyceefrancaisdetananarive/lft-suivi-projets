@@ -69,7 +69,7 @@ export default async function handler(req, res) {
 
     if (b.geste !== 'restaurer' && b.geste !== 'supprimer') return refus(res, 400, 'Geste inconnu.');
     if (!estDirection(m)) return refus(res, 403, 'Réservé à la direction et à l’administration.');
-    if (archivee(p.annee) && m.role !== 'admin') return refus(res, 403, ARCHIVE);
+    if (archivee(p.annee) && !estDirection(m)) return refus(res, 403, ARCHIVE);
     if (!p.supprime_le) return refus(res, 409, "Ce projet n'est pas dans la corbeille.");
 
     if (b.geste === 'restaurer') {

@@ -3,7 +3,8 @@ import {
   CATS_VIE_SCOLAIRE,
 } from '../_lib/autorisation.js';
 import {
-  valider, datesOrdonnees, CHAMPS_LUS, versPage, originesDe, synchroniserReferents,
+  valider, datesOrdonnees, CHAMPS_LUS, versPage, versPublic, anneesPubliques, originesDe,
+  synchroniserReferents,
 } from '../_lib/projets.js';
 import { anneeCourante, anneeSuivante, anneeValide, archivee } from '../_lib/annee.js';
 import { journaliser } from '../_lib/journal.js';
@@ -12,7 +13,8 @@ import {
 } from '../_lib/supabase.js';
 
 // Une fiche projet.
-//   GET   ?id=...   lire une fiche (publique, hors corbeille)
+//   GET   ?id=...   lire une fiche (hors corbeille ; publique sous forme
+//                   réduite pour l'année courante et la précédente)
 //   POST            créer        { annee?, nom, categorie, ... }
 //   PATCH           modifier     { id, modifie_le?, ...champs modifiés }
 // La mise à la corbeille passe par /api/projets/corbeille.
@@ -29,12 +31,12 @@ async function pourPage(p, m) {
   });
 }
 
-/** L'année dans laquelle cette personne peut créer : courante, suivante (direction), archivée (admin). */
+/** L'année dans laquelle cette personne peut créer : courante, suivante et archivée (direction et admin). */
 function anneeAutorisee(m, annee) {
   const courante = anneeCourante();
   if (annee === courante) return true;
   if (annee === anneeSuivante(courante)) return estDirection(m);
-  return archivee(annee) && m.role === 'admin';
+  return archivee(annee) && estDirection(m);
 }
 
 export default async function handler(req, res) {
@@ -46,7 +48,11 @@ export default async function handler(req, res) {
       if (!UUID.test(id)) return refus(res, 400, 'Identifiant invalide.');
       const p = await fiche(id);
       if (!p || p.supprime_le) return refus(res, 404, 'Projet introuvable.');
-      return res.status(200).json({ ok: true, projet: await pourPage(p, await appelant(req)) });
+      const lecteur = await appelant(req);
+      if (lecteur) return res.status(200).json({ ok: true, projet: await pourPage(p, lecteur) });
+      // Visiteur : la vitrine, années courante et précédente, forme réduite.
+      if (!anneesPubliques(anneeCourante()).includes(p.annee)) return refus(res, 404, 'Projet introuvable.');
+      return res.status(200).json({ ok: true, projet: versPublic(await pourPage(p, null)) });
     }
 
     if (req.method !== 'POST' && req.method !== 'PATCH') return refus(res, 405, 'Méthode non autorisée.');
@@ -88,8 +94,8 @@ export default async function handler(req, res) {
     if (!p || p.supprime_le) return refus(res, 404, 'Projet introuvable.');
     const refs = await referentDe(m.id, [p.id]);
     if (!peutModifier(m, p, refs.has(p.id))) {
-      if (archivee(p.annee) && m.role !== 'admin') {
-        return refus(res, 403, "Cette année est archivée (lecture seule). Seul l'administrateur peut la modifier.");
+      if (archivee(p.annee) && !estDirection(m)) {
+        return refus(res, 403, "Cette année est archivée (lecture seule).");
       }
       if (p.verrouille_le && !estDirection(m)) {
         return refus(res, 403, 'Ce projet est verrouillé. Adressez-vous à la direction pour le modifier.');
