@@ -178,8 +178,10 @@ export function anneesPubliques(courante) {
 
 /** La forme publique d'une fiche, à partir de la forme versPage. */
 export function versPublic(f) {
+  // Les visiteurs voient les niveaux, jamais les classes (décision de Max du
+  // 18/11/2026 : classes et élèves restent réservés aux comptes connectés).
   const {
-    ressources, priorite, cree_par_nom, cree_le, modifie_le, referents, phare_propose, ...reste
+    ressources, priorite, cree_par_nom, cree_le, modifie_le, referents, phare_propose, classes, ...reste
   } = f;
   return { ...reste, referents: nomsPublics() ? referents : null };
 }
