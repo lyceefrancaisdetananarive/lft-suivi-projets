@@ -464,7 +464,9 @@ html.anim .revele.vu{opacity:1;transform:none}
 .mq>span{display:inline-flex}
 .mq svg,.elv-legende svg,.bascule svg{width:15px;height:15px;display:block;flex-shrink:0}
 .mq .sig,.elv-legende .sig,.bascule .sig{font-size:10px;font-weight:700;letter-spacing:.03em;line-height:1;padding:3px 5px;border-radius:6px;background:#E3EEF8;color:var(--bleu)}
-.sig.pap{background:#F6E6F1;color:var(--magenta)}
+.sig.PAP{background:#F6E6F1;color:var(--magenta)}
+.sig.PPRE{background:#FBEEDC;color:#8A4B00}
+.sig.PAI{background:#FDE8E6;color:#A8271C}
 .elv-liste{display:flex;flex-direction:column;gap:14px}
 .elv-liste ul{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px}
 .elv-liste li{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px;color:var(--texte2)}
@@ -472,7 +474,7 @@ html.anim .revele.vu{opacity:1;transform:none}
 .reperes-tab th{text-align:left;font-size:12px;font-weight:700;color:var(--gris);padding:8px 6px;border-bottom:1px solid var(--bord)}
 .reperes-tab td{padding:6px;border-bottom:1px solid var(--trait)}
 .reperes-tab td.c,.reperes-tab th.c{text-align:center}
-.bascule{width:34px;height:30px;border-radius:9px;border:1.5px solid var(--bord);background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:.45}
+.bascule{min-width:34px;padding:0 4px;height:30px;border-radius:9px;border:1.5px solid var(--bord);background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:.45}
 .bascule[aria-pressed="true"]{opacity:1;border-color:var(--bleu);background:#E3EEF8}
 .bascule:disabled{cursor:wait}
 .jetons{position:relative}
@@ -928,7 +930,7 @@ function dessinerEntete(){
     h+=`<div class="compte"><button class="compte-btn" id="compte-btn" aria-expanded="false" aria-controls="compte-menu" onclick="basculerMenu()"><span class="compte-ini">${esc(initiales(nom))}</span><span class="sr">Mon compte : </span>${esc(S.user.prenom||nom)}</button>
       <div class="compte-menu" id="compte-menu"><div class="qui"><strong>${esc(nom)}</strong><span>${esc(ROLE_L[S.user.role]||S.user.role)}</span></div>
       ${estDirection()?'<a href="#/direction">Pilotage de l\'année</a><a href="#/comptes">Comptes et journal</a>':''}
-      ${peutReperer()?'<a href="#/eleves">Élèves : mandats et PAP</a>':''}
+      ${peutReperer()?`<a href="#/eleves">Élèves : ${peutAccompagner()?'mandats et accompagnements':'mandats'}</a>`:''}
       <a href="#/aide">Aide</a>
       ${(S.user.role==='enseignant'||S.user.role==='vie_scolaire')?'<button onclick="demanderSuppression()">Demander la suppression de mon compte</button>':''}
       <button onclick="seDeconnecter()">Se déconnecter</button></div></div>`;
@@ -1239,7 +1241,7 @@ async function chargerElevesFiche(p){
     el.innerHTML=`<div class="elv-liste">${cls.map(k=>{ const l=retenus.filter(x=>x.classe===k), n=elevesDe(p.annee,k).length;
       return `<div><strong>${esc(k)}</strong> <span class="aide">${l.length?`${l.length} élève${l.length>1?'s':''}${n?' sur '+n:''}`:n?`toute la classe, ${n} élèves`:'toute la classe'}</span>
         ${l.length?`<ul>${l.map(x=>`<li><span>${esc(x.nom)} ${esc(x.prenom)}</span>${marques(x)}</li>`).join('')}</ul>`:''}</div>`; }).join('')}
-      ${retenus.some(x=>x.pap||x.mandats.length)?legendeEleves():''}</div>`;
+      ${retenus.some(x=>(x.accompagnements||[]).length||x.mandats.length)?legendeEleves():''}</div>`;
   }catch(e){ const el=$('fiche-elv'); if(el) el.innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; }
 }
 async function chargerCommentaires(id){
@@ -1335,6 +1337,11 @@ function basculerClasse(o,k){ const e=etatDe(o); e.classes=e.classes.includes(k)
 const ELV={};                       // « annee|classe » : liste des élèves
 const voitEleves=()=>!!S.user&&['enseignant','vie_scolaire','direction','admin'].includes(S.user.role);
 const peutReperer=()=>!!S.user&&['vie_scolaire','direction','admin'].includes(S.user.role);
+/* PAP, PPRE, PAI : enseignants, direction et administrateur seulement (le serveur ne les
+   envoie qu'à eux) ; saisis par la direction et l'administrateur. */
+const voitAccompagnements=()=>!!S.user&&['enseignant','direction','admin'].includes(S.user.role);
+const peutAccompagner=()=>!!S.user&&['direction','admin'].includes(S.user.role);
+const ACCOMP=['PAP','PPRE','PAI'];
 const elevesDe=(a,k)=>ELV[a+'|'+k]||[];
 const ETOILE='M8 1.4l2 4.2 4.6.6-3.4 3.2.9 4.6L8 11.8 3.9 14l.9-4.6L1.4 6.2 6 5.6z';
 const MQ={
@@ -1343,13 +1350,15 @@ const MQ={
   eco_delegue:{l:'Éco-délégué',i:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M14 2C7.5 2 3 4.8 3 9.6c0 1.3.4 2.5 1.1 3.4C5.2 9.8 7.6 7.4 10.8 6 8.1 7.9 6.1 10.4 5.3 13.6c.8.5 1.8.8 2.9.8C12.9 14.4 14 9.2 14 2z" fill="#4E6A12"/></svg>'},
   cvc:{l:'Élu au conseil de la vie collégienne',i:'<span class="sig">CVC</span>'},
   cvl:{l:'Élu au conseil de la vie lycéenne',i:'<span class="sig">CVL</span>'},
-  pap:{l:"Plan d'accompagnement personnalisé",i:'<span class="sig pap">PAP</span>'},
+  PAP:{l:"Plan d'accompagnement personnalisé",i:'<span class="sig PAP">PAP</span>'},
+  PPRE:{l:'Programme personnalisé de réussite éducative',i:'<span class="sig PPRE">PPRE</span>'},
+  PAI:{l:"Projet d'accueil individualisé",i:'<span class="sig PAI">PAI</span>'},
 };
 function marques(x){
-  const l=(x.mandats||[]).filter(m=>MQ[m]).concat(x.pap?['pap']:[]);
+  const l=(x.mandats||[]).filter(m=>MQ[m]).concat((x.accompagnements||[]).filter(m=>MQ[m]));
   return l.length?`<span class="mq">${l.map(m=>`<span role="img" title="${esc(MQ[m].l)}" aria-label="${esc(MQ[m].l)}">${MQ[m].i}</span>`).join('')}</span>`:'';
 }
-const legendeEleves=()=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl','pap'].map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
+const legendeEleves=()=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl'].concat(voitAccompagnements()?ACCOMP:[]).map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
 async function chargerEleves(a,classes){
   const manque=classes.filter(k=>!ELV[a+'|'+k]);
   if(!manque.length) return;
@@ -2058,7 +2067,8 @@ function pageTexte(mc,surtitre,titre,blocs){
   mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px"><div class="tete-page"><div><span class="surtitre">${surtitre}</span><h1 class="titre">${titre}</h1></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">${blocs.map(([t,c])=>`<section class="carte bloc"><h2>${t}</h2>${c}</section>`).join('')}</div></div>`;
 }
-/* ── Repères des élèves : mandats et PAP (vie scolaire, direction, administrateur) ── */
+/* ── Repères des élèves : mandats (vie scolaire, direction, administrateur) et
+   accompagnements PAP, PPRE, PAI (direction, administrateur) ── */
 const ANNEE_ELEVES=()=>S.currentYear;
 async function vueReperes(mc,classe){
   if(!peutReperer()){ mc.innerHTML=`<div class="carte vide">Page réservée à la vie scolaire et à la direction.</div>`; return; }
@@ -2066,8 +2076,10 @@ async function vueReperes(mc,classe){
   const college=k&&['6e','5e','4e','3e'].includes(nivDeClasse(k));
   const cols=college?['delegue_titulaire','delegue_suppleant','eco_delegue','cvc']:['delegue_titulaire','delegue_suppleant','eco_delegue','cvl'];
   mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px">
-    <div style="display:flex;flex-direction:column;gap:8px"><span class="surtitre">Élèves, ${esc(a)}</span><h1 class="titre">Mandats et <em>PAP</em></h1>
-      <p class="txt" style="max-width:760px">Délégués, éco-délégués, élus au CVC ou au CVL, et élèves bénéficiant d'un plan d'accompagnement personnalisé. Ces repères ne sont visibles que des personnels connectés, dans le choix des élèves d'un projet et sur les fiches. Aucune autre information n'est tenue ici.</p></div>
+    <div style="display:flex;flex-direction:column;gap:8px"><span class="surtitre">Élèves, ${esc(a)}</span><h1 class="titre">${peutAccompagner()?'Mandats et <em>accompagnements</em>':'Mandats des <em>élèves</em>'}</h1>
+      <p class="txt" style="max-width:760px">${peutAccompagner()
+        ?"Délégués, éco-délégués, élus au CVC ou au CVL, et accompagnements repris de Pronote : PAP, PPRE, PAI. Les mandats sont visibles des personnels connectés ; les accompagnements des seuls enseignants et de la direction. Les visiteurs non connectés ne voient aucun élève."
+        :"Délégués, éco-délégués, élus au CVC ou au CVL. Ces repères ne sont visibles que des personnels connectés, dans le choix des élèves d'un projet et sur les fiches."}</p></div>
     <section class="carte bloc" style="gap:14px"><h2 class="sec">Classe</h2><div class="classes-niv" style="background:none;padding:0">${NIVEAUX.map(n=>`<div class="cl-rang"><b>${n}</b>${CLASSES[n].map(c=>`<a class="puce mini" style="text-decoration:none" aria-pressed="${c===k}" href="#/eleves/${c}">${c}</a>`).join('')}</div>`).join('')}</div></section>
     ${k?`<section class="carte bloc" style="gap:14px"><h2 class="sec">${esc(k)}</h2><div id="rep-tab"><div class="chargement"><span class="rond-charge"></span></div></div></section>`:''}
   </div>`;
@@ -2076,18 +2088,20 @@ async function vueReperes(mc,classe){
   catch(e){ $('rep-tab').innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; return; }
   const l=elevesDe(a,k), t=$('rep-tab'); if(!t) return;
   if(!l.length){ t.innerHTML=`<p class="txt">Pas de liste d'élèves pour cette classe en ${esc(a)}.</p>`; return; }
-  const entete=[...cols,'pap'];
+  const entete=cols.concat(peutAccompagner()?ACCOMP:[]);
   t.innerHTML=`<div style="overflow-x:auto"><table class="reperes-tab"><thead><tr><th>Élève</th>${entete.map(m=>`<th class="c" title="${esc(MQ[m].l)}">${m==='delegue_titulaire'?'Titulaire':m==='delegue_suppleant'?'Suppléant':m==='eco_delegue'?'Éco':m.toUpperCase()}</th>`).join('')}</tr></thead>
-    <tbody>${l.map(x=>`<tr><td>${esc(x.nom)} ${esc(x.prenom)}</td>${entete.map(m=>{ const on=m==='pap'?x.pap:x.mandats.includes(m);
+    <tbody>${l.map(x=>`<tr><td>${esc(x.nom)} ${esc(x.prenom)}</td>${entete.map(m=>{ const on=ACCOMP.includes(m)?(x.accompagnements||[]).includes(m):x.mandats.includes(m);
       return `<td class="c"><button type="button" class="bascule" aria-pressed="${on}" aria-label="${esc(MQ[m].l)} : ${esc(x.nom)} ${esc(x.prenom)}" onclick="basculerRepere(this,'${a}','${k}','${x.id}','${m}')">${MQ[m].i}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 async function basculerRepere(btn,a,k,id,m){
   const x=elevesDe(a,k).find(e=>e.id===id); if(!x) return;
   const corps={id};
-  if(m==='pap') corps.pap=!x.pap; else corps.mandats=x.mandats.includes(m)?x.mandats.filter(v=>v!==m):x.mandats.concat([m]);
+  const bascule=(l)=>l.includes(m)?l.filter(v=>v!==m):l.concat([m]);
+  if(ACCOMP.includes(m)) corps.accompagnements=bascule(x.accompagnements||[]); else corps.mandats=bascule(x.mandats);
   btn.disabled=true;
-  try{ const d=await api('projets/eleves',{methode:'PATCH',corps}); x.mandats=d.eleve.mandats; x.pap=d.eleve.pap;
-    btn.setAttribute('aria-pressed',m==='pap'?x.pap:x.mandats.includes(m)); }
+  try{ const d=await api('projets/eleves',{methode:'PATCH',corps}); x.mandats=d.eleve.mandats;
+    if(d.eleve.accompagnements) x.accompagnements=d.eleve.accompagnements;
+    btn.setAttribute('aria-pressed',ACCOMP.includes(m)?x.accompagnements.includes(m):x.mandats.includes(m)); }
   catch(e){ toast(msgErr(e)); }
   btn.disabled=false;
 }
@@ -2104,7 +2118,7 @@ function vueMentions(mc){
   pageTexte(mc,'Informations','Mentions <em>légales</em>',[
     ['Éditeur','<p class="txt">Lycée Français de Tananarive, établissement en gestion directe de l’Agence pour l’enseignement français à l’étranger, Antananarivo, Madagascar.</p>'],
     ['Hébergement','<p class="txt">Site et fonctions serveur : Vercel Inc., exécution à Francfort. Base de données et authentification : Supabase Inc., région de Francfort (Union européenne).</p>'],
-    ['Données personnelles','<p class="txt">Pour les personnels : nom, prénom, adresse @egd.mg et rôle, pour l’authentification et les droits. Les mots de passe ne sont jamais conservés en clair. Le journal d’activité enregistre les actions, avec le pays et la ville approximatifs, le système et le navigateur ; l’adresse IP n’est pas conservée. Il n’est consultable que par la direction et l’administrateur de l’application. Un cookie de session strictement nécessaire est déposé à la connexion. Aucune donnée n’est transmise à des tiers. Aucune donnée d’élève n’est enregistrée. Droits d’accès, de rectification et d’effacement : s’adresser à l’administrateur de l’application.</p>'],
+    ['Données personnelles','<p class="txt">Pour les personnels : nom, prénom, adresse @egd.mg et rôle, pour l’authentification et les droits. Les mots de passe ne sont jamais conservés en clair. Le journal d’activité enregistre les actions, avec le pays et la ville approximatifs, le système et le navigateur ; l’adresse IP n’est pas conservée. Il n’est consultable que par la direction et l’administrateur de l’application. Un cookie de session strictement nécessaire est déposé à la connexion. Pour les élèves : nom, prénom et classe, repris de Pronote, avec les mandats (délégués, éco-délégués, élus au CVC ou au CVL) et les accompagnements (PAP, PPRE, PAI). Ces informations ne sont visibles que des personnels connectés ; les accompagnements, des seuls enseignants et de la direction. Les visiteurs non connectés n’en voient aucune. Ce traitement a été décidé par la direction, après une analyse d’impact et l’avis du délégué à la protection des données. Aucune donnée n’est transmise à des tiers. Droits d’accès, de rectification et d’effacement : s’adresser à l’administrateur de l’application.</p>'],
     ['Présentation publique','<p class="txt">Les visiteurs non connectés voient les projets de l’année en cours et de l’année précédente, avec les noms des collègues référents, qui ont donné leur accord à cette diffusion, mais sans les moyens ni les échanges internes. Un collègue qui ne souhaite plus apparaître le signale à l’administrateur de l’application. Aucun nom d’élève n’y figure.</p>'],
   ]);
 }

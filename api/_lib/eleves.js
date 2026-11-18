@@ -5,27 +5,36 @@
 //  - Les noms ne sortent QUE vers les personnels connectés (enseignant, vie
 //    scolaire, direction, administrateur). Jamais vers la vitrine, jamais
 //    vers un compte élève : rien ici n'est appelé par versPublic.
-//  - Le repère PAP (plan d'accompagnement personnalisé) suit la même règle.
-//    Aucune autre information de santé ou de handicap n'est tenue (ni PPS,
-//    ni PAI) : le minimum utile à l'équipe qui monte le projet.
-//  - Les mandats et le repère PAP sont posés par la vie scolaire, la
-//    direction ou l'administrateur.
+//  - Les accompagnements (PAP, PPRE, PAI, comme dans Pronote ; db/07) sont
+//    plus restreints encore : enseignants, direction et administrateur
+//    seulement. La vie scolaire ne les reçoit pas. Quand l'espace élève
+//    ouvrira, un élève ne verra que les siens, jamais ceux d'un camarade.
+//  - Les mandats sont posés par la vie scolaire, la direction ou
+//    l'administrateur ; les accompagnements par la direction ou
+//    l'administrateur.
 //  - Sans élève retenu, toute la classe est concernée.
 // =====================================================================
 
 import { lire, lireTout, ecrire, UUID } from './supabase.js';
 
 export const MANDATS = ['delegue_titulaire', 'delegue_suppleant', 'eco_delegue', 'cvc', 'cvl'];
-export const CHAMPS_ELEVE = 'id,classe,nom,prenom,mandats,pap';
+export const ACCOMPAGNEMENTS = ['PAP', 'PPRE', 'PAI'];
+export const CHAMPS_ELEVE = 'id,classe,nom,prenom,mandats,accompagnements';
 const LECTEURS = ['enseignant', 'vie_scolaire', 'direction', 'admin'];
 const REPEREURS = ['vie_scolaire', 'direction', 'admin'];
+const LECTEURS_ACCOMPAGNEMENTS = ['enseignant', 'direction', 'admin'];
+const ACCOMPAGNATEURS = ['direction', 'admin'];
 export const MAX_ELEVES = 1500;
 
 export const peutLireEleves = (m) => LECTEURS.includes(m?.role);
 export const peutReperer = (m) => REPEREURS.includes(m?.role);
+export const voitAccompagnements = (m) => LECTEURS_ACCOMPAGNEMENTS.includes(m?.role);
+export const peutAccompagner = (m) => ACCOMPAGNATEURS.includes(m?.role);
 
-const versPage = (e) => ({
-  id: e.id, classe: e.classe, nom: e.nom, prenom: e.prenom, mandats: e.mandats ?? [], pap: Boolean(e.pap),
+/** La forme envoyée à la page : les accompagnements n'y sont que pour qui peut les voir. */
+const versPage = (e, m) => ({
+  id: e.id, classe: e.classe, nom: e.nom, prenom: e.prenom, mandats: e.mandats ?? [],
+  ...(voitAccompagnements(m) ? { accompagnements: e.accompagnements ?? [] } : {}),
 });
 const ordre = (a, b) => a.classe.localeCompare(b.classe) || a.nom.localeCompare(b.nom, 'fr')
   || a.prenom.localeCompare(b.prenom, 'fr');
@@ -43,17 +52,17 @@ export const classesDuTexte = (t) => String(t ?? '').split(/\s*[,;]\s*/)
   .map((s) => s.trim().toUpperCase()).filter((s) => /^[0-9A-Z]{2,12}$/.test(s));
 
 /** Les élèves d'une liste de classes, pour une année. */
-export async function elevesDesClasses(annee, classes) {
+export async function elevesDesClasses(annee, classes, m) {
   if (!classes.length) return [];
   const l = await lireTout('eleves',
     `annee=eq.${annee}&classe=in.(${classes.join(',')})&select=${CHAMPS_ELEVE}&order=id`);
-  return l.map(versPage).sort(ordre);
+  return l.map((e) => versPage(e, m)).sort(ordre);
 }
 
 /** Les élèves retenus pour un projet (vide : toute la classe). */
-export async function elevesDuProjet(projetId) {
+export async function elevesDuProjet(projetId, m) {
   const l = await lireTout('projet_eleves', `projet_id=eq.${projetId}&select=eleves(${CHAMPS_ELEVE})&order=eleve_id`);
-  return l.map((x) => x.eleves).filter(Boolean).map(versPage).sort(ordre);
+  return l.map((x) => x.eleves).filter(Boolean).map((e) => versPage(e, m)).sort(ordre);
 }
 
 /**
