@@ -1,14 +1,22 @@
 // =====================================================================
-// Les élèves concernés par un projet (décision du 18/11/2026 : direction,
-// AIPD réalisée, avis du DPD obtenu ; voir db/06-eleves.sql).
+// Les élèves concernés par un projet (décision de la direction du
+// 18/11/2026 ; voir db/06-eleves.sql). Règle d'accès corrigée le 24/11/2026
+// (audit du 20/11/2026 : tout enseignant lisait les PAP, PPRE et PAI de
+// toutes les classes, sans trace).
 //
-//  - Les noms ne sortent QUE vers les personnels connectés (enseignant, vie
-//    scolaire, direction, administrateur). Jamais vers la vitrine, jamais
-//    vers un compte élève : rien ici n'est appelé par versPublic.
+//  - Les noms et les mandats ne sortent QUE vers les personnels connectés
+//    (enseignant, vie scolaire, direction, administrateur). Jamais vers la
+//    vitrine, jamais vers un compte élève : rien ici n'est appelé par
+//    versPublic.
 //  - Les accompagnements (PAP, PPRE, PAI, comme dans Pronote ; db/07) sont
-//    plus restreints encore : enseignants, direction et administrateur
-//    seulement. La vie scolaire ne les reçoit pas. Quand l'espace élève
-//    ouvrira, un élève ne verra que les siens, jamais ceux d'un camarade.
+//    plus restreints : la direction et l'administrateur les voient pour toute
+//    classe ; un enseignant ne les voit QUE pour les élèves d'un projet dont
+//    il est l'auteur ou le référent (appel « ?projet= »), jamais par une
+//    liste de classes. La vie scolaire ne les reçoit pas. Quand l'espace
+//    élève ouvrira, un élève ne verra que les siens.
+//  - Chaque lecture qui renvoie des accompagnements est inscrite au journal
+//    (action read_support : projet ou classes, nombre d'élèves, jamais de
+//    nom).
 //  - Les mandats sont posés par la vie scolaire, la direction ou
 //    l'administrateur ; les accompagnements par la direction ou
 //    l'administrateur.
@@ -19,23 +27,41 @@ import { lire, lireTout, ecrire, UUID } from './supabase.js';
 
 export const MANDATS = ['delegue_titulaire', 'delegue_suppleant', 'eco_delegue', 'cvc', 'cvl'];
 export const ACCOMPAGNEMENTS = ['PAP', 'PPRE', 'PAI'];
-export const CHAMPS_ELEVE = 'id,classe,nom,prenom,mandats,accompagnements';
+const CHAMPS_BASE = 'id,classe,nom,prenom,mandats';
+/** Les colonnes lues : les accompagnements ne quittent la base que pour qui peut les voir. */
+export const champsEleve = (avec) => (avec ? `${CHAMPS_BASE},accompagnements` : CHAMPS_BASE);
 const LECTEURS = ['enseignant', 'vie_scolaire', 'direction', 'admin'];
 const REPEREURS = ['vie_scolaire', 'direction', 'admin'];
-const LECTEURS_ACCOMPAGNEMENTS = ['enseignant', 'direction', 'admin'];
 const ACCOMPAGNATEURS = ['direction', 'admin'];
 export const MAX_ELEVES = 1500;
+/** Classes au plus par demande de liste (la page découpe ses demandes). */
+export const MAX_CLASSES = 10;
 
 export const peutLireEleves = (m) => LECTEURS.includes(m?.role);
 export const peutReperer = (m) => REPEREURS.includes(m?.role);
-export const voitAccompagnements = (m) => LECTEURS_ACCOMPAGNEMENTS.includes(m?.role);
 export const peutAccompagner = (m) => ACCOMPAGNATEURS.includes(m?.role);
 
-/** La forme envoyée à la page : les accompagnements n'y sont que pour qui peut les voir. */
-const versPage = (e, m) => ({
+/** Direction et administrateur : les accompagnements de toute classe. */
+export const voitTousAccompagnements = (m) => ACCOMPAGNATEURS.includes(m?.role);
+
+/**
+ * Les accompagnements des élèves d'UN projet : ceux qui les voient tous, et
+ * l'enseignant auteur du projet ou inscrit parmi ses référents.
+ * `projet` : { cree_par } ; `estReferent` : l'appelant figure dans projet_referents.
+ */
+export const voitAccompagnementsDuProjet = (m, projet, estReferent) =>
+  voitTousAccompagnements(m)
+  || (m?.role === 'enseignant' && Boolean(projet)
+    && (projet.cree_par === m.id || Boolean(estReferent)));
+
+/** La forme envoyée à la page : les accompagnements n'y sont que si `avec`. */
+const versPage = (e, avec) => ({
   id: e.id, classe: e.classe, nom: e.nom, prenom: e.prenom, mandats: e.mandats ?? [],
-  ...(voitAccompagnements(m) ? { accompagnements: e.accompagnements ?? [] } : {}),
+  ...(avec ? { accompagnements: e.accompagnements ?? [] } : {}),
 });
+
+/** Combien d'élèves de cette liste portent au moins un accompagnement. */
+export const nbAvecAccompagnement = (l) => l.filter((e) => (e.accompagnements ?? []).length).length;
 const ordre = (a, b) => a.classe.localeCompare(b.classe) || a.nom.localeCompare(b.nom, 'fr')
   || a.prenom.localeCompare(b.prenom, 'fr');
 
@@ -52,17 +78,17 @@ export const classesDuTexte = (t) => String(t ?? '').split(/\s*[,;]\s*/)
   .map((s) => s.trim().toUpperCase()).filter((s) => /^[0-9A-Z]{2,12}$/.test(s));
 
 /** Les élèves d'une liste de classes, pour une année. */
-export async function elevesDesClasses(annee, classes, m) {
+export async function elevesDesClasses(annee, classes, avec) {
   if (!classes.length) return [];
   const l = await lireTout('eleves',
-    `annee=eq.${annee}&classe=in.(${classes.join(',')})&select=${CHAMPS_ELEVE}&order=id`);
-  return l.map((e) => versPage(e, m)).sort(ordre);
+    `annee=eq.${annee}&classe=in.(${classes.join(',')})&select=${champsEleve(avec)}&order=id`);
+  return l.map((e) => versPage(e, avec)).sort(ordre);
 }
 
 /** Les élèves retenus pour un projet (vide : toute la classe). */
-export async function elevesDuProjet(projetId, m) {
-  const l = await lireTout('projet_eleves', `projet_id=eq.${projetId}&select=eleves(${CHAMPS_ELEVE})&order=eleve_id`);
-  return l.map((x) => x.eleves).filter(Boolean).map((e) => versPage(e, m)).sort(ordre);
+export async function elevesDuProjet(projetId, avec) {
+  const l = await lireTout('projet_eleves', `projet_id=eq.${projetId}&select=eleves(${champsEleve(avec)})&order=eleve_id`);
+  return l.map((x) => x.eleves).filter(Boolean).map((e) => versPage(e, avec)).sort(ordre);
 }
 
 /**

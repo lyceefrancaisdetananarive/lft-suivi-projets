@@ -2,8 +2,9 @@
 -- Élèves concernés par un projet (18/11/2026). À jouer une fois dans
 -- l'éditeur SQL du projet Suivi_Projets_LFT.
 --
--- Décision de la direction, AIPD réalisée et avis du DPD obtenu (déclaré
--- par l'administrateur de l'application le 18/11/2026). Les noms d'élèves :
+-- Décision de la direction du 18/11/2026. (La mention « AIPD réalisée et
+-- avis du DPD obtenu » a été retirée le 24/11/2026 : à vérifier et à mettre
+-- à jour avant tout nouvel usage.) Les noms d'élèves :
 --   - viennent de Pronote, une liste par année scolaire ;
 --   - ne sont lus QUE par les personnels connectés (enseignant, vie
 --     scolaire, direction, administrateur), jamais par la vitrine publique ;

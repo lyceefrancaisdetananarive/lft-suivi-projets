@@ -1,7 +1,8 @@
-import { appelant, reArmer } from '../_lib/autorisation.js';
+import { appelant, reArmer, referentDe } from '../_lib/autorisation.js';
 import {
-  peutLireEleves, peutReperer, peutAccompagner, voitAccompagnements, elevesDesClasses, elevesDuProjet, classesDuTexte,
-  MANDATS, ACCOMPAGNEMENTS,
+  peutLireEleves, peutReperer, peutAccompagner, voitTousAccompagnements, voitAccompagnementsDuProjet,
+  nbAvecAccompagnement, elevesDesClasses, elevesDuProjet, classesDuTexte,
+  MANDATS, ACCOMPAGNEMENTS, MAX_CLASSES,
 } from '../_lib/eleves.js';
 import { anneeCourante, anneeValide } from '../_lib/annee.js';
 import { journaliser } from '../_lib/journal.js';
@@ -15,8 +16,10 @@ import {
 //   PATCH { id, mandats?, accompagnements? }
 //         mandats : vie scolaire, direction, administrateur ;
 //         accompagnements (PAP, PPRE, PAI) : direction, administrateur.
-// Les accompagnements ne sont renvoyés qu'aux enseignants, à la direction et
-// à l'administrateur.
+// Les accompagnements : à la direction et à l'administrateur pour toute classe ;
+// à l'enseignant auteur ou référent, pour les seuls élèves de son projet (?projet=).
+// Chaque lecture qui en renvoie est journalisée (read_support), sans nom.
+// Dix classes au plus par demande de liste.
 // Jamais d'adresse : la table n'en porte pas.
 
 export default async function handler(req, res) {
@@ -29,16 +32,25 @@ export default async function handler(req, res) {
       const projet = String(req.query?.projet ?? '');
       if (projet) {
         if (!UUID.test(projet)) return refus(res, 400, 'Identifiant invalide.');
-        const p = (await lire('projets', `id=eq.${projet}&select=id,supprime_le`))[0];
+        const p = (await lire('projets', `id=eq.${projet}&select=id,code,cree_par,supprime_le`))[0];
         if (!p || p.supprime_le) return refus(res, 404, 'Projet introuvable.');
-        return res.status(200).json({ ok: true, eleves: await elevesDuProjet(projet, m) });
+        const refs = await referentDe(m.id, [p.id]);
+        const avec = voitAccompagnementsDuProjet(m, p, refs.has(p.id));
+        const eleves = await elevesDuProjet(projet, avec);
+        const n = nbAvecAccompagnement(eleves);
+        if (n) await journaliser(req, m, 'read_support', `Projet ${p.code} : ${n} élève${n > 1 ? 's' : ''} avec accompagnement`);
+        return res.status(200).json({ ok: true, eleves });
       }
       const annee = String(req.query?.annee ?? '') || anneeCourante();
       if (!anneeValide(annee)) return refus(res, 400, 'Année invalide.');
-      const classes = [...new Set(classesDuTexte(req.query?.classes))].slice(0, 80);
-      return res.status(200).json({
-        ok: true, annee, eleves: await elevesDesClasses(annee, classes, m),
-      });
+      const classes = [...new Set(classesDuTexte(req.query?.classes))];
+      if (classes.length > MAX_CLASSES) return refus(res, 400, `${MAX_CLASSES} classes au plus par demande.`);
+      // Par classes, seuls la direction et l'administrateur reçoivent les accompagnements.
+      const avec = voitTousAccompagnements(m);
+      const eleves = await elevesDesClasses(annee, classes, avec);
+      const n = nbAvecAccompagnement(eleves);
+      if (n) await journaliser(req, m, 'read_support', `Classes ${classes.join(', ')} (${annee}) : ${n} élève${n > 1 ? 's' : ''} avec accompagnement`);
+      return res.status(200).json({ ok: true, annee, eleves });
     }
 
     if (req.method !== 'PATCH') return refus(res, 405, 'Méthode non autorisée.');
@@ -73,7 +85,7 @@ export default async function handler(req, res) {
     await journaliser(req, m, 'update_student', `Repères d'un élève de ${e.classe}`);
     await reArmer(req, res, m);
     return res.status(200).json({ ok: true, eleve: {
-      id: e.id, mandats: e.mandats, ...(voitAccompagnements(m) ? { accompagnements: e.accompagnements } : {}),
+      id: e.id, mandats: e.mandats, ...(voitTousAccompagnements(m) ? { accompagnements: e.accompagnements } : {}),
     } });
   } catch (e) {
     console.error('projets/eleves :', e.message);
