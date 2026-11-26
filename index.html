@@ -322,15 +322,15 @@ tr.cliquable{cursor:pointer}
 .decor{position:fixed;inset:0;z-index:-1;display:none;background:#0B2238;overflow:hidden}
 .decor i{position:absolute;inset:-2%;background-size:cover;background-position:center 38%;opacity:0;transform:scale(1.06);transition:opacity 1.8s ease,transform 9s ease-out}
 .decor i.actif{opacity:1;transform:scale(1)}
-/* Photos agrandies x4 (Real-ESRGAN, 20/11/2026) : 2000 px pour les ordinateurs,
-   1000 px (fichiers -m) pour les petits écrans et les connexions lentes. */
-.decor .p1{background-image:url('images/campus.webp')}
-.decor .p2{background-image:url('images/coursive.webp')}
-.decor .p3{background-image:url('images/allee.webp')}
+/* Photos du lycée fournies par la communication (26/11/2026), en WebP sans métadonnées : 2400 px
+   pour les ordinateurs, 1000 x 1480 recadrées (fichiers -m) pour les petits écrans et les connexions lentes. */
+.decor .p1{background-image:url('images/campus-aerien.webp')}
+.decor .p2{background-image:url('images/cour.webp')}
+.decor .p3{background-image:url('images/arbres.webp')}
 @media (max-width:820px){
-  .decor .p1{background-image:url('images/campus-m.webp')}
-  .decor .p2{background-image:url('images/coursive-m.webp')}
-  .decor .p3{background-image:url('images/allee-m.webp')}
+  .decor .p1{background-image:url('images/campus-aerien-m.webp')}
+  .decor .p2{background-image:url('images/cour-m.webp')}
+  .decor .p3{background-image:url('images/arbres-m.webp')}
 }
 .decor::after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,rgba(2,20,38,.84) 0%,rgba(2,20,38,.58) 40%,rgba(2,20,38,.2) 100%),linear-gradient(0deg,rgba(2,20,38,.62) 0%,rgba(2,20,38,0) 46%)}
 body.vitrine .decor{display:block}
@@ -416,8 +416,8 @@ body.vitrine #bandeaux{margin-top:16px}
 @keyframes defile{to{transform:translateX(-50%)}}
 /* Bande photo de fin, avec plaque de verre */
 .rideau>.bande-photo{max-width:none;width:auto;margin-inline:calc(-1 * clamp(16px,3.5vw,56px))}
-.bande-photo{position:relative;min-height:clamp(440px,48vw,660px);display:flex;align-items:flex-end;justify-content:flex-end;padding:clamp(20px,4vw,56px);background:#0B2238 url('images/coursive.webp') center 42%/cover;overflow:hidden}
-@media (max-width:820px){.bande-photo{background-image:url('images/coursive-m.webp')}}
+.bande-photo{position:relative;min-height:clamp(440px,48vw,660px);display:flex;align-items:flex-end;justify-content:flex-end;padding:clamp(20px,4vw,56px);background:#0B2238 url('images/cour.webp') center 42%/cover;overflow:hidden}
+@media (max-width:820px){.bande-photo{background-image:url('images/cour-m.webp')}}
 .bande-photo::before{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,20,38,.5),rgba(2,20,38,0) 62%)}
 .plaque-cnx{position:relative;max-width:470px;padding:30px;border-radius:30px;background:rgba(255,255,255,.74);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);border:1px solid rgba(255,255,255,.85);box-shadow:0 24px 60px rgba(2,20,38,.28);display:flex;flex-direction:column;gap:14px}
 .plaque-cnx h3{margin:0;font-family:var(--serif);font-weight:400;font-size:clamp(26px,2.4vw,34px);line-height:1.15}
@@ -430,8 +430,8 @@ html.anim .revele.vu{opacity:1;transform:none}
 
 /* La connexion, sur fond de photo */
 .voile.photo{background:#0B2238}
-.voile.photo::before{content:'';position:fixed;inset:0;background:url('images/campus.webp') center 38%/cover;transform:scale(1.04)}
-@media (max-width:820px){.voile.photo::before{background-image:url('images/campus-m.webp')}}
+.voile.photo::before{content:'';position:fixed;inset:0;background:url('images/campus-aerien.webp') center 38%/cover;transform:scale(1.04)}
+@media (max-width:820px){.voile.photo::before{background-image:url('images/campus-aerien-m.webp')}}
 .voile.photo::after{content:'';position:fixed;inset:0;background:linear-gradient(160deg,rgba(2,20,38,.35),rgba(2,20,38,.72))}
 .voile.photo .fenetre{z-index:1;background:rgba(255,255,255,.84);box-shadow:0 30px 80px rgba(0,0,0,.35)}
 .cnx-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.15)}
@@ -1250,7 +1250,7 @@ async function chargerElevesFiche(p){
     el.innerHTML=`<div class="elv-liste">${cls.map(k=>{ const l=retenus.filter(x=>x.classe===k), n=elevesDe(p.annee,k).length;
       return `<div><strong>${esc(k)}</strong> <span class="aide">${l.length?`${l.length} élève${l.length>1?'s':''}${n?' sur '+n:''}`:n?`toute la classe, ${n} élèves`:'toute la classe'}</span>
         ${l.length?`<ul>${l.map(x=>`<li><span>${esc(x.nom)} ${esc(x.prenom)}</span>${marques(x)}</li>`).join('')}</ul>`:''}</div>`; }).join('')}
-      ${retenus.some(x=>(x.accompagnements||[]).length||x.mandats.length)?legendeEleves():''}</div>`;
+      ${retenus.some(x=>(x.accompagnements||[]).length||x.mandats.length)?legendeEleves(retenus):''}</div>`;
   }catch(e){ const el=$('fiche-elv'); if(el) el.innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; }
 }
 async function chargerCommentaires(id){
@@ -1341,14 +1341,14 @@ function basculerNiveau(o,n){
 }
 function basculerClasse(o,k){ const e=etatDe(o); e.classes=e.classes.includes(k)?e.classes.filter(x=>x!==k):e.classes.concat([k]); elaguerEleves(e); dessinerNiveaux(o); }
 
-/* Élèves des classes choisies (décision du 18/11/2026, AIPD et avis du DPD) : visibles des
+/* Élèves des classes choisies (décision de la direction du 18/11/2026) : visibles des
    seuls personnels connectés. Sans élève coché, toute la classe est concernée. */
 const ELV={};                       // « annee|classe » : liste des élèves
 const voitEleves=()=>!!S.user&&['enseignant','vie_scolaire','direction','admin'].includes(S.user.role);
 const peutReperer=()=>!!S.user&&['vie_scolaire','direction','admin'].includes(S.user.role);
-/* PAP, PPRE, PAI : enseignants, direction et administrateur seulement (le serveur ne les
-   envoie qu'à eux) ; saisis par la direction et l'administrateur. */
-const voitAccompagnements=()=>!!S.user&&['enseignant','direction','admin'].includes(S.user.role);
+/* PAP, PPRE, PAI : le serveur ne les envoie qu'à la direction, à l'administrateur et, pour les
+   élèves de leur projet, à l'enseignant auteur ou référent ; saisis par la direction et
+   l'administrateur. */
 const peutAccompagner=()=>!!S.user&&['direction','admin'].includes(S.user.role);
 const ACCOMP=['PAP','PPRE','PAI'];
 const elevesDe=(a,k)=>ELV[a+'|'+k]||[];
@@ -1367,13 +1367,14 @@ function marques(x){
   const l=(x.mandats||[]).filter(m=>MQ[m]).concat((x.accompagnements||[]).filter(m=>MQ[m]));
   return l.length?`<span class="mq">${l.map(m=>`<span role="img" title="${esc(MQ[m].l)}" aria-label="${esc(MQ[m].l)}">${MQ[m].i}</span>`).join('')}</span>`:'';
 }
-const legendeEleves=()=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl'].concat(voitAccompagnements()?ACCOMP:[]).map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
+const legendeEleves=(l=[])=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl'].concat(l.some(x=>(x.accompagnements||[]).length)?ACCOMP:[]).map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
 async function chargerEleves(a,classes){
   const manque=classes.filter(k=>!ELV[a+'|'+k]);
   if(!manque.length) return;
-  const d=await api('projets/eleves',{query:{annee:a,classes:manque.join(',')}});
+  const lots=[]; for(let i=0;i<manque.length;i+=10) lots.push(manque.slice(i,i+10));   // le serveur refuse plus de dix classes par demande
+  const reponses=await Promise.all(lots.map(l=>api('projets/eleves',{query:{annee:a,classes:l.join(',')}})));
   manque.forEach(k=>{ ELV[a+'|'+k]=[]; });
-  d.eleves.forEach(x=>{ (ELV[a+'|'+x.classe]=ELV[a+'|'+x.classe]||[]).push(x); });
+  reponses.forEach(d=>d.eleves.forEach(x=>{ (ELV[a+'|'+x.classe]=ELV[a+'|'+x.classe]||[]).push(x); }));
 }
 function elaguerEleves(e){
   if(!e.eleves) return;
@@ -1398,7 +1399,7 @@ async function dessinerEleves(o){
     return dessinerEleves(o);
   }
   e.ouverts=e.ouverts||[];
-  c.innerHTML=`<div class="elv"><span class="aide">Toute la classe participe ? Ne cochez personne. Sinon, ouvrez la classe et cochez les élèves concernés.</span>${legendeEleves()}
+  c.innerHTML=`<div class="elv"><span class="aide">Toute la classe participe ? Ne cochez personne. Sinon, ouvrez la classe et cochez les élèves concernés.</span>${legendeEleves(cls.flatMap(k=>elevesDe(e.annee,k)))}
     ${cls.map(k=>{ const l=elevesDe(e.annee,k);
       return `<details ${e.ouverts.includes(k)?'open':''} ontoggle="majOuvert('${o}','${k}',this.open)"><summary><span><b>${k}</b><small id="${o}-elv-n-${k}">${resumeClasse(e,k)}</small></span></summary>
       <div class="elv-corps">${l.length?`<div><button type="button" class="btn btn-clair" style="min-height:36px;padding:6px 14px;font-size:13px" onclick="toutLaClasse('${o}','${k}')">Toute la classe</button></div>
