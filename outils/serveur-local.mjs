@@ -125,7 +125,7 @@ async function creerComptes() {
 }
 
 // ------------------------------------------------------------ serveur
-const PUBLICS = new Set(['/index.html', '/logo-lft.jpg', '/logo_aefe_egd.png']);
+const PUBLICS = new Set(['/index.html', '/logo-lft.jpg']);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const gestionnaires = new Map();
 async function gestionnaire(nom) {

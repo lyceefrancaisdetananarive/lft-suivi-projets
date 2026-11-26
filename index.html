@@ -50,6 +50,12 @@ button{font-family:inherit;color:inherit}
 input,textarea,select{font-family:inherit;color:var(--encre)}
 :focus-visible{outline:3px solid rgba(0,84,159,.45);outline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* Lien d'évitement : premier arrêt de la touche Tab, visible seulement quand il a le focus. */
+.evitement{position:absolute;left:16px;top:-80px;z-index:300;padding:10px 16px;border-radius:12px;background:var(--bleu);color:#fff;font-weight:700;text-decoration:none}
+.evitement:focus{top:12px}
+.evitement:hover,.evitement:focus{color:#fff}
+/* Bouton ou lien logé dans l'en-tête d'une ligne cliquable : la ligne devient utilisable au clavier sans changer d'aspect. */
+.choix-ligne{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:inherit;text-decoration:none;cursor:pointer}
 
 /* Fond : quelques disques pâles, fixes */
 .fond{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
@@ -602,6 +608,7 @@ html.anim .revele.vu{opacity:1;transform:none}
 </style>
 </head>
 <body>
+<a class="evitement" href="#mc" onclick="event.preventDefault();document.getElementById('mc').focus()">Aller au contenu</a>
 <div class="fond" aria-hidden="true"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
 <div class="decor" id="decor" aria-hidden="true"><i class="p1"></i><i class="p2"></i><i class="p3"></i></div>
 <div class="page">
@@ -814,7 +821,9 @@ function lireStock(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); 
 function ecrireStock(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 function chargerSession(){ const t=temoin(); if(!t){ oublierSession(); return; } const u=lireStock(CLE_U); if(u&&u.role===t.role) S.user=u; }
 function garderSession(u){ S.user={email:u.email||'',prenom:u.prenom||'',nom:u.nom||'',role:u.role}; ecrireStock(CLE_U,S.user); }
-function oublierSession(){ S.user=null; try{ localStorage.removeItem(CLE_U); ['lft_u','lft_e','lft_p','lft_t','lft_session_exp'].forEach(k=>localStorage.removeItem(k)); }catch(e){} }
+// Fin de session (déconnexion, expiration) : rien de ce qu'a chargé un compte ne reste pour le suivant.
+// Les listes gardées sur l'appareil ne sont effacées que si un compte était ouvert : celles d'un visiteur restent.
+function oublierSession(){ const avait=!!S.user||!!lireStock(CLE_U); S.user=null; viderEleves(); try{ localStorage.removeItem(CLE_U); ['lft_u','lft_e','lft_p','lft_t','lft_session_exp'].forEach(k=>localStorage.removeItem(k)); }catch(e){} if(avait) viderListes(); }
 function viderListes(){ try{ Object.keys(localStorage).filter(k=>k.startsWith(CLE_LISTE)).forEach(k=>localStorage.removeItem(k)); }catch(e){} }
 
 /* ── API ── */
@@ -1246,7 +1255,7 @@ async function chargerElevesFiche(p){
     el.innerHTML=`<div class="elv-liste">${cls.map(k=>{ const l=retenus.filter(x=>x.classe===k), n=elevesDe(p.annee,k).length;
       return `<div><strong>${esc(k)}</strong> <span class="aide">${l.length?`${l.length} élève${l.length>1?'s':''}${n?' sur '+n:''}`:n?`toute la classe, ${n} élèves`:'toute la classe'}</span>
         ${l.length?`<ul>${l.map(x=>`<li><span>${esc(x.nom)} ${esc(x.prenom)}</span>${marques(x)}</li>`).join('')}</ul>`:''}</div>`; }).join('')}
-      ${retenus.some(x=>(x.accompagnements||[]).length||x.mandats.length)?legendeEleves(retenus):''}</div>`;
+      ${retenus.some(x=>(voitAccompagnements()&&(x.accompagnements||[]).length)||x.mandats.length)?legendeEleves(retenus):''}</div>`;
   }catch(e){ const el=$('fiche-elv'); if(el) el.innerHTML=`<p class="txt">${esc(msgErr(e))}</p>`; }
 }
 async function chargerCommentaires(id){
@@ -1340,12 +1349,16 @@ function basculerClasse(o,k){ const e=etatDe(o); e.classes=e.classes.includes(k)
 /* Élèves des classes choisies (décision de la direction du 18/11/2026) : visibles des
    seuls personnels connectés. Sans élève coché, toute la classe est concernée. */
 const ELV={};                       // « annee|classe » : liste des élèves
+function viderEleves(){ for(const k in ELV) delete ELV[k]; }   // à chaque changement de session
 const voitEleves=()=>!!S.user&&['enseignant','vie_scolaire','direction','admin'].includes(S.user.role);
 const peutReperer=()=>!!S.user&&['vie_scolaire','direction','admin'].includes(S.user.role);
 /* PAP, PPRE, PAI : le serveur ne les envoie qu'à la direction, à l'administrateur et, pour les
    élèves de leur projet, à l'enseignant auteur ou référent ; saisis par la direction et
    l'administrateur. */
 const peutAccompagner=()=>!!S.user&&['direction','admin'].includes(S.user.role);
+// PAP, PPRE et PAI : jamais affichés à la vie scolaire ni aux visiteurs, quoi que contienne la mémoire de la page.
+// Pour les autres, le serveur décide déjà de ce qu'il envoie.
+const voitAccompagnements=()=>!!S.user&&['enseignant','direction','admin'].includes(S.user.role);
 const ACCOMP=['PAP','PPRE','PAI'];
 const elevesDe=(a,k)=>ELV[a+'|'+k]||[];
 const ETOILE='M8 1.4l2 4.2 4.6.6-3.4 3.2.9 4.6L8 11.8 3.9 14l.9-4.6L1.4 6.2 6 5.6z';
@@ -1360,10 +1373,10 @@ const MQ={
   PAI:{l:"Projet d'accueil individualisé",i:'<span class="sig PAI">PAI</span>'},
 };
 function marques(x){
-  const l=(x.mandats||[]).filter(m=>MQ[m]).concat((x.accompagnements||[]).filter(m=>MQ[m]));
+  const l=(x.mandats||[]).filter(m=>MQ[m]).concat(voitAccompagnements()?(x.accompagnements||[]).filter(m=>MQ[m]):[]);
   return l.length?`<span class="mq">${l.map(m=>`<span role="img" title="${esc(MQ[m].l)}" aria-label="${esc(MQ[m].l)}">${MQ[m].i}</span>`).join('')}</span>`:'';
 }
-const legendeEleves=(l=[])=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl'].concat(l.some(x=>(x.accompagnements||[]).length)?ACCOMP:[]).map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
+const legendeEleves=(l=[])=>`<div class="elv-legende">${['delegue_titulaire','delegue_suppleant','eco_delegue','cvc','cvl'].concat(voitAccompagnements()&&l.some(x=>(x.accompagnements||[]).length)?ACCOMP:[]).map(m=>`<span>${MQ[m].i}${esc(MQ[m].l)}</span>`).join('')}</div>`;
 async function chargerEleves(a,classes){
   const manque=classes.filter(k=>!ELV[a+'|'+k]);
   if(!manque.length) return;
@@ -1726,7 +1739,7 @@ function ouvrirConnexion(mode){
     <p style="font-size:12px;text-align:center;color:var(--gris)">Un problème de compte ? Écrivez à l'administrateur de l'application.</p>`,false,true);
 }
 function errCnx(m){ const e=$('c-err'); e.textContent=m; e.classList.add('vue'); }
-async function apresConnexion(d,msg){ garderSession(d); fermerFenetre(); viderListes(); toast(msg); await Promise.all([chargerAnnees(),actualiser(true)]); }
+async function apresConnexion(d,msg){ garderSession(d); fermerFenetre(); viderListes(); viderEleves(); toast(msg); await Promise.all([chargerAnnees(),actualiser(true)]); }
 function seConnecter(btn){
   const em=val('c-em').toLowerCase(), pw=($('c-pw')||{}).value||'';
   if(!em||!pw) return errCnx('Indiquez votre adresse et votre mot de passe.');
@@ -1815,7 +1828,7 @@ function vueTableau(mc){
     </div>
     <section class="carte bloc"><div style="display:flex;flex-direction:column;gap:6px"><span class="surtitre">Palier 1</span><h2>Couverture des parcours par niveau</h2><p class="txt" style="color:var(--gris)">Nombre de projets qui contribuent à chaque parcours. Les cases vides signalent un niveau à couvrir.</p></div>
       <div class="defile"><table class="matrice"><thead><tr><th scope="col" style="text-align:left">Parcours</th>${NIVEAUX.map(v=>`<th scope="col">${v}</th>`).join('')}</tr></thead>
-        <tbody>${Object.keys(PA).map(k=>`<tr class="cliquable" onclick="S.paChoisi='${k}';location.hash='#/parcours'"><th scope="row" style="color:${PA[k].fg}">${PA_ONGLET[k]}</th>${NIVEAUX.map(v=>caseCouverture(compte(k,null,v),PA[k])).join('')}</tr>`).join('')}</tbody></table></div>
+        <tbody>${Object.keys(PA).map(k=>`<tr class="cliquable" onclick="S.paChoisi='${k}';location.hash='#/parcours'"><th scope="row" style="color:${PA[k].fg}"><a class="choix-ligne" href="#/parcours">${PA_ONGLET[k]}</a></th>${NIVEAUX.map(v=>caseCouverture(compte(k,null,v),PA[k])).join('')}</tr>`).join('')}</tbody></table></div>
       <p class="constat">${esc(constat)}</p>
     </section>
   </div>`;
@@ -1836,10 +1849,12 @@ function vueParcoursPublic(mc){
     </section>
   </div>`;
 }
+// Choix d'un niveau dans le tableau des parcours, à la souris (ligne) ou au clavier (bouton) ; le focus revient sur le niveau choisi.
+function choisirNiveau(nv){ S.nivChoisi=nv; vueParcours($('mc')); const b=$('mc').querySelector(`.choix-ligne[data-niv="${nv}"]`); if(b) b.focus({preventScroll:true}); }
 function vueParcours(mc){
   if(!S.user) return vueParcoursPublic(mc);
   const k=S.paChoisi||'S', P=PA[k], niv=S.nivChoisi||'6e';
-  const ligne=(nv)=>`<tr class="cliquable${nv===niv?' choisi':''}" onclick="S.nivChoisi='${nv}';vueParcours($('mc'))"><th scope="row">${nv}</th>${P.axes.map((ax,i)=>caseCouverture(compte(k,i,nv),P)).join('')}</tr>`;
+  const ligne=(nv)=>`<tr class="cliquable${nv===niv?' choisi':''}" onclick="choisirNiveau('${nv}')"><th scope="row"><button type="button" class="choix-ligne" data-niv="${nv}" aria-pressed="${nv===niv}">${nv}</button></th>${P.axes.map((ax,i)=>caseCouverture(compte(k,i,nv),P)).join('')}</tr>`;
   const manques=P.axes.map((ax,i)=>[ax[0],NIVEAUX.filter(nv=>!compte(k,i,nv))]);
   const vides=manques.filter(m=>m[1].length===NIVEAUX.length).map(m=>'« '+m[0]+' »');
   const casesVides=manques.reduce((s,m)=>s+m[1].length,0);
