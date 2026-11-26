@@ -42,8 +42,9 @@ if(/\.github\.io$/.test(location.hostname)){
   --serif:'Spectral',Georgia,serif;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--fond);color:var(--encre);font-family:'Marianne',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;min-height:100vh;overflow-x:hidden}
+/* Rien ne doit élargir la page sur téléphone : sinon le navigateur agrandit la zone des éléments fixes et la barre du bas sort de l'écran. */
+html{-webkit-text-size-adjust:100%;overflow-x:hidden}
+body{margin:0;background:var(--fond);color:var(--encre);font-family:'Marianne',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;min-height:100vh;overflow-x:clip;overflow-wrap:break-word}
 a{color:var(--bleu)} a:hover{color:var(--encre)}
 button{font-family:inherit;color:inherit}
 input,textarea,select{font-family:inherit;color:var(--encre)}
@@ -72,7 +73,6 @@ input,textarea,select{font-family:inherit;color:var(--encre)}
 .nav a:hover{background:rgba(0,84,159,.07)}
 .nav a[aria-current="page"]{background:var(--bleu);color:#fff}
 .nav svg{width:18px;height:18px;display:none}
-.nav .nav-cnx{display:none}
 .outils{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .annee-sel{height:44px;padding:0 34px 0 12px;border-radius:12px;border:1px solid var(--bord2);background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23032844' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;appearance:none;-webkit-appearance:none;font-size:14px;font-weight:500;cursor:pointer}
 .compte{position:relative}
@@ -574,9 +574,6 @@ html.anim .revele.vu{opacity:1;transform:none}
   .nav{position:fixed;left:12px;right:12px;bottom:14px;z-index:50;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:6px;border-radius:24px;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.85);box-shadow:0 10px 30px rgba(3,40,68,.16)}
   .nav a{flex-direction:column;gap:2px;padding:8px 0;border-radius:18px;font-size:11px;min-height:52px;justify-content:center}
   .nav svg{display:block}
-  .nav .nav-cnx{display:flex}
-  .entete.visiteur .outils{width:auto}
-  .entete.visiteur .btn-cnx{display:none}
   .entete.visiteur .marque-txt strong{font-size:15px}
   .outils .btn-nouveau{display:none}
   .fab{display:flex;position:fixed;right:18px;bottom:96px;z-index:50;width:56px;height:56px;border-radius:50%;background:var(--magenta);align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(182,24,128,.35)}
@@ -590,7 +587,7 @@ html.anim .revele.vu{opacity:1;transform:none}
   .kpis-vitrine .kpi small{display:none}
   .fiche-tete p{font-size:16px}
   .recherche{min-width:0;width:100%}
-  .grille{grid-template-columns:1fr}
+  .grille{grid-template-columns:minmax(0,1fr)}
   .etapes{gap:8px}
   .actions-fiche{bottom:92px}
   .bloc{padding:18px}
@@ -928,8 +925,7 @@ function dessinerEntete(){
   const p=S.route.page;
   const lien=(h,id,t,ic)=>`<a href="${h}" ${p===id?'aria-current="page"':''}>${ic}<span>${t}</span></a>`;
   $('nav').innerHTML=lien('#/','liste','Projets',IC.projets)+(S.user?lien('#/tableau','tableau','Tableau de bord',IC.tableau):'')
-    +lien('#/parcours','parcours','Parcours',IC.parcours)+(estDirection()?lien('#/direction','direction','Direction',IC.direction):'')
-    +(S.user?'':`<a href="#/connexion" class="nav-cnx">${IC.cadenas}<span>Connexion</span></a>`);
+    +lien('#/parcours','parcours','Parcours',IC.parcours)+(estDirection()?lien('#/direction','direction','Direction',IC.direction):'');
   $('nav').closest('.entete').classList.toggle('visiteur',!S.user);
   const annees=S.years.slice().sort().reverse();
   let h=`<label class="sr" for="sel-annee">Année scolaire</label><select class="annee-sel" id="sel-annee" onchange="changerAnnee(this.value)">${annees.map(a=>`<option value="${a}"${a===S.year?' selected':''}>${a}${a>S.currentYear?' (préparation)':''}</option>`).join('')}</select>`;
