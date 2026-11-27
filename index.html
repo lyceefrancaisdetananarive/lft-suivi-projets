@@ -310,6 +310,7 @@ tr.cliquable{cursor:pointer}
 .cpt .gestes{grid-area:gestes;display:flex;gap:6px;flex-wrap:nowrap;justify-content:flex-end;align-items:center}
 .cpt .btn-petit,.cpt .sel-role{min-height:32px;height:32px;padding-top:0;padding-bottom:0}
 .cpt .sel-role{max-width:150px;text-overflow:ellipsis}
+.cpt .btn-gerer{display:none;grid-area:gerer}
 .vide-filtre{padding:16px;margin:0}
 .cadre .journal th{position:sticky;top:0;z-index:1;background:#fff}
 .journal .j-alerte{color:#9B1C1C}
@@ -318,7 +319,8 @@ tr.cliquable{cursor:pointer}
 .cadre-cpt{container-type:inline-size}
 @container (min-width:760px){.cpt{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;grid-template-areas:"nom info gestes";padding:4px 12px}}
 @container (max-width:640px){.cpt .gestes{flex-wrap:wrap;max-width:250px}}
-@container (max-width:460px){.cpt{grid-template-areas:"nom" "info" "gestes";grid-template-columns:minmax(0,1fr);padding:10px 12px}.cpt .gestes{flex-wrap:wrap;max-width:none;justify-content:flex-start;margin-top:4px}.cpt-nom{flex-wrap:wrap}}
+/* Sur téléphone, les gestes sont rangés derrière un bouton « Gérer ». */
+@container (max-width:460px){.cpt{grid-template-areas:"nom gerer" "info gerer" "gestes gestes";grid-template-columns:minmax(0,1fr) auto;padding:8px 12px}.cpt .btn-gerer{display:inline-flex;align-items:center}.cpt:not(.ouvert):not(.protege) .gestes{display:none}.cpt .gestes{flex-wrap:wrap;max-width:none;justify-content:flex-start;margin-top:6px}.cpt.protege .gestes{margin-top:2px}}
 @media (max-width:760px){
   .cadre-cpt,.cadre-jr{max-height:max(300px,calc(100svh - 250px))}
   .barre-f{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
@@ -2130,11 +2132,16 @@ function ligneCompte(u){
   const soi=u.email===S.user.email, protege=soi||(u.role==='admin'&&!CPT.moiAdmin);
   const roles=['enseignant','vie_scolaire','direction'].concat(u.role==='admin'||CPT.moiAdmin?['admin']:[]);
   const etat=!u.actif?' <span class="role" style="background:#FDECEC;color:#9B1C1C">désactivé</span>':(!u.active?' <span class="role" style="background:#FFF1D6;color:#7A4A00" title="Mot de passe pas encore choisi">à activer</span>':'');
-  return `<div class="cpt${u.actif?'':' inactif'}"><span class="cpt-nom"><strong>${esc(u.prenom||'')} ${esc(u.nom||'')}</strong>${etat}</span><small class="cpt-info" title="${esc(u.email)}">${esc(u.email)}${u.derniere_connexion?', dernière connexion le '+esc(fmtDateHeure(u.derniere_connexion)):', jamais connecté'}</small>
+  return `<div class="cpt${u.actif?'':' inactif'}${protege?' protege':''}"><span class="cpt-nom"><strong>${esc(u.prenom||'')} ${esc(u.nom||'')}</strong>${etat}</span><small class="cpt-info" title="${esc(u.email)}">${esc(u.email)}${u.derniere_connexion?', dernière connexion le '+esc(fmtDateHeure(u.derniere_connexion)):', jamais connecté'}</small>
+    ${protege?'':`<button type="button" class="btn btn-clair btn-petit btn-gerer" aria-expanded="false" aria-label="Gérer le compte ${esc(u.email)}" onclick="basculerGestes(this)">Gérer</button>`}
     <span class="gestes">${protege?tagRole(u.role):`<select class="sel-role" aria-label="Rôle de ${esc(u.email)}" onchange="changerRole('${jsq(u.id)}',this)">${roles.map(r=>`<option value="${r}"${r===u.role?' selected':''}>${esc(ROLE_L[r])}</option>`).join('')}</select>
       ${u.actif?`<button class="btn btn-clair btn-petit" onclick="envoyerLien('${jsq(u.id)}','${jsq(u.email)}')" title="Envoyer un lien pour choisir son mot de passe" aria-label="Envoyer un lien à ${esc(u.email)}">Lien</button>`:''}
       <button class="btn btn-clair btn-petit" onclick="activer('${jsq(u.id)}','${jsq(u.email)}',${!u.actif})" aria-label="${u.actif?'Désactiver':'Réactiver'} le compte ${esc(u.email)}">${u.actif?'Désactiver':'Réactiver'}</button>
       <button class="btn btn-danger btn-petit" onclick="supprimerCompte('${jsq(u.id)}','${jsq(u.email)}')" aria-label="Supprimer le compte ${esc(u.email)}">Supprimer</button>`}</span></div>`;
+}
+function basculerGestes(b){
+  const o=b.closest('.cpt').classList.toggle('ouvert');
+  b.setAttribute('aria-expanded',String(o)); b.textContent=o?'Fermer':'Gérer';
 }
 function rendreComptes(){
   const box=$('cpt-liste'); if(!box) return;
