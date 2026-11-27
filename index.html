@@ -291,6 +291,52 @@ tr.cliquable{cursor:pointer}
 .role{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--doux);color:var(--texte2)}
 .role.admin{background:#FBE6F2;color:#A3156F}.role.direction{background:#E3EEF8;color:var(--bleu)}.role.vie_scolaire{background:#ECF4D6;color:#46560F}
 .sel-role{height:36px;border-radius:10px;border:1px solid var(--champ);background:#fff;padding:0 8px;font-size:13px}
+/* Barres de filtres et cadres qui défilent (la page reste en place) */
+.barre-f{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.barre-f .saisie{height:40px;padding:0 12px;border-radius:10px;font-size:14px;width:auto;max-width:100%}
+.barre-f .f-rech{flex:1 1 240px;min-width:0}
+.barre-f .f-case{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--texte2)}
+.compte-aff{margin-left:auto;font-size:13px;color:var(--gris);white-space:nowrap}
+.cadre{overflow:auto;border:1px solid var(--bord);border-radius:14px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.cadre-cpt{max-height:max(320px,calc(100vh - 240px))}
+.cadre-jr{max-height:max(360px,calc(100vh - 220px))}
+.cpt{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nom gestes" "info gestes";gap:1px 14px;align-items:center;padding:6px 12px;border-top:1px solid var(--trait)}
+.cpt:first-child{border-top:none}
+.cpt.inactif{opacity:.6}
+.cpt-nom{grid-area:nom;display:flex;align-items:center;gap:8px;font-size:14px;min-width:0}
+.cpt-nom strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cpt-nom .role{white-space:nowrap;flex-shrink:0}
+.cpt-info{grid-area:info;font-size:13px;color:var(--gris);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cpt .gestes{grid-area:gestes;display:flex;gap:6px;flex-wrap:nowrap;justify-content:flex-end;align-items:center}
+.cpt .btn-petit,.cpt .sel-role{min-height:32px;height:32px;padding-top:0;padding-bottom:0}
+.cpt .sel-role{max-width:150px;text-overflow:ellipsis}
+.vide-filtre{padding:16px;margin:0}
+.cadre .journal th{position:sticky;top:0;z-index:1;background:#fff}
+.journal .j-alerte{color:#9B1C1C}
+@media (min-width:1000px){.deux-col>.cote.fixe{position:sticky;top:104px}}
+/* La disposition d'une ligne suit la largeur du cadre, pas celle de l'écran. */
+.cadre-cpt{container-type:inline-size}
+@container (min-width:760px){.cpt{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;grid-template-areas:"nom info gestes";padding:4px 12px}}
+@container (max-width:640px){.cpt .gestes{flex-wrap:wrap;max-width:250px}}
+@container (max-width:460px){.cpt{grid-template-areas:"nom" "info" "gestes";grid-template-columns:minmax(0,1fr);padding:10px 12px}.cpt .gestes{flex-wrap:wrap;max-width:none;justify-content:flex-start;margin-top:4px}.cpt-nom{flex-wrap:wrap}}
+@media (max-width:760px){
+  .cadre-cpt,.cadre-jr{max-height:max(300px,calc(100svh - 250px))}
+  .barre-f{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .barre-f .saisie{width:100%;min-width:0}
+  .barre-f .f-rech,.barre-f .f-case,.barre-f .compte-aff{grid-column:1 / -1}
+  .barre-f .compte-aff{margin-left:0}
+  .compte-aff{margin-left:0}
+  .journal{min-width:0}
+  .journal thead{display:none}
+  .journal tr{display:block;padding:10px 12px;border-bottom:1px solid var(--trait)}
+  .journal td{display:block;padding:2px 0;border:none;white-space:normal!important}
+  .journal td.j-date,.journal td.j-act{display:inline}
+  .journal td.j-date::after{content:', '}
+  .journal td:empty{display:none}
+  .journal td.j-lieu,.journal td.j-app{display:inline;color:var(--gris);font-size:13px}
+  .journal td.j-lieu::after{content:', '}
+  .journal td.j-act::after{content:'';display:block}
+}
 
 /* Fenêtres */
 .voile{position:fixed;inset:0;z-index:100;background:rgba(3,40,68,.35);display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
@@ -2009,6 +2055,27 @@ function supprimerDefinitif(id,nom){
 }
 
 /* ── Comptes et journal (direction et administrateur) ── */
+/* Libellé et famille de chaque action du journal ; le serveur garde ses codes. */
+const ACTIONS_J={
+  login:['Connexion','cnx'],logout:['Déconnexion','cnx'],
+  login_fail:['Échec de connexion','echec'],login_blocked:['Connexion bloquée','echec'],login_disabled:['Connexion d\'un compte désactivé','echec'],
+  forgot_password:['Lien de mot de passe demandé','mdp'],send_link:['Lien de mot de passe envoyé','mdp'],password_reset:['Mot de passe choisi par lien','mdp'],change_password:['Mot de passe changé','mdp'],
+  add_project:['Nouveau projet','proj'],update_project:['Projet modifié','proj'],delete_project:['Projet mis à la corbeille','proj'],restore_project:['Projet restauré','proj'],permanent_delete:['Projet supprimé définitivement','proj'],
+  reconduct_project:['Projet reconduit','proj'],reconduct_batch:['Projets reconduits','proj'],add_comment:['Commentaire','proj'],lock_project:['Projet verrouillé','proj'],unlock_project:['Projet déverrouillé','proj'],
+  feature_project:['Projet mis en avant','proj'],unfeature_project:['Projet retiré de la une','proj'],request_deletion:['Demande de suppression','proj'],
+  add_user:['Compte créé','cpt'],update_user:['Compte modifié','cpt'],delete_user:['Compte supprimé','cpt'],change_role:['Rôle changé','cpt'],deactivate_user:['Compte désactivé','cpt'],activate_user:['Compte réactivé','cpt'],
+  brouillons_identifiants:['Brouillons d\'identifiants créés','cpt'],brouillons_identifiants_maj:['Brouillons d\'identifiants mis à jour','cpt'],rotation_identifiants_compromis:['Identifiants provisoires renouvelés','cpt'],
+  read_support:['Accompagnements consultés','elv'],update_student:['Repères d\'un élève modifiés','elv'],
+  backup_sheet:['Sauvegarde automatique','svg']
+};
+const FAMILLES_J=[['cnx','Connexions réussies'],['echec','Échecs et blocages'],['mdp','Mots de passe'],['proj','Projets et commentaires'],['cpt','Comptes'],['elv','Élèves et accompagnements'],['svg','Sauvegardes automatiques'],['autre','Autres actions']];
+const actionJ=(a)=>ACTIONS_J[a]||[a||'','autre'];
+const tagRole=(r)=>`<span class="role ${esc(r)}">${esc(ROLE_L[r]||r)}</span>`;
+/* Données chargées et choix des filtres : gardés quand la page se recharge après un geste. */
+const CPT={us:[],logs:[],moiAdmin:false};
+const FC={q:'',role:'',etat:'',tri:'nom'};
+const FJ={q:'',fam:'',qui:'',periode:'',tri:'recent',svg:false};
+const optF=(v,t,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(t)}</option>`;
 async function vueComptes(mc){
   if(!estDirection()){ mc.innerHTML='<div class="carte vide">Réservé à la direction et à l\'administrateur de l\'application.</div>'; return; }
   mc.innerHTML=`<div style="display:flex;flex-direction:column;gap:24px"><a class="retour" href="#/direction">${IC.retour}Pilotage de l'année</a>
@@ -2016,25 +2083,27 @@ async function vueComptes(mc){
     <div id="cpt"><div class="chargement"><span class="rond-charge"></span> Chargement…</div></div></div>`;
   const [cd,jd]=await Promise.all([api('admin/comptes').catch(e=>({_ko:e})),api('admin/journal',{query:{limite:500}}).catch(e=>({_ko:e}))]);
   if(S.route.page!=='comptes') return;
-  const moiAdmin=S.user.role==='admin';
-  const us=cd.comptes||[], logs=jd.journal||[];
-  const tag=(r)=>`<span class="role ${esc(r)}">${esc(ROLE_L[r]||r)}</span>`;
+  CPT.moiAdmin=S.user.role==='admin'; CPT.us=cd.comptes||[]; CPT.logs=jd.journal||[];
+  const {us,logs,moiAdmin}=CPT;
   const attente=us.filter(u=>u.actif&&!u.active).length;
-  const connexions=logs.filter(l=>/login|connexion/i.test(l.action||'')).length;
+  const connexions=logs.filter(l=>l.action==='login').length;
+  const nRole=(r)=>us.filter(u=>u.role===r).length;
+  const nEtat={connecte:us.filter(u=>u.derniere_connexion).length,attente,desactive:us.filter(u=>!u.actif).length};
+  const fams=FAMILLES_J.map(([k,t])=>[k,t,logs.filter(l=>actionJ(l.action)[1]===k).length]).filter(f=>f[2]);
+  const qui=[...new Set(logs.map(l=>l.email).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
   $('cpt').innerHTML=`<div style="display:flex;flex-direction:column;gap:20px">
     ${cd._ko?`<div class="bandeau archive">${IC.info}<span>Comptes : ${esc(msgErr(cd._ko))}</span></div>`:''}
-    <div class="deux-col"><section class="carte bloc princ"><h2>Comptes <span class="aide">(${us.length}${attente?', dont '+attente+' sans mot de passe choisi':''})</span></h2>
-      ${us.map(u=>{
-        const soi=u.email===S.user.email, protege=soi||(u.role==='admin'&&!moiAdmin);
-        const roles=['enseignant','vie_scolaire','direction'].concat(u.role==='admin'||moiAdmin?['admin']:[]);
-        return `<div class="rangee" style="${u.actif?'':'opacity:.55'}"><span><strong>${esc(u.prenom||'')} ${esc(u.nom||'')}${!u.actif?' <span class="role" style="background:#FDECEC;color:#9B1C1C">désactivé</span>':(!u.active?' <span class="role" style="background:#FFF1D6;color:#7A4A00">mot de passe à choisir</span>':'')}</strong><small>${esc(u.email)}${u.derniere_connexion?', dernière connexion le '+esc(fmtDateHeure(u.derniere_connexion)):', jamais connecté'}</small></span>
-          <span class="gestes">${protege?tag(u.role):`<select class="sel-role" aria-label="Rôle de ${esc(u.email)}" onchange="changerRole('${jsq(u.id)}',this)">${roles.map(r=>`<option value="${r}"${r===u.role?' selected':''}>${esc(ROLE_L[r])}</option>`).join('')}</select>
-            ${u.actif?`<button class="btn btn-clair btn-petit" onclick="envoyerLien('${jsq(u.id)}','${jsq(u.email)}')" title="Envoyer un lien pour choisir son mot de passe">Lien</button>`:''}
-            <button class="btn btn-clair btn-petit" onclick="activer('${jsq(u.id)}','${jsq(u.email)}',${!u.actif})">${u.actif?'Désactiver':'Réactiver'}</button>
-            <button class="btn btn-danger btn-petit" onclick="supprimerCompte('${jsq(u.id)}','${jsq(u.email)}')" aria-label="Supprimer le compte ${esc(u.email)}">Supprimer</button>`}</span></div>`;
-      }).join('')}
+    <div class="deux-col"><section class="carte bloc princ" aria-labelledby="t-cpt"><h2 id="t-cpt">Comptes <span class="aide">(${us.length}${attente?', dont '+attente+' sans mot de passe choisi':''})</span></h2>
+      <div class="barre-f" role="search" aria-label="Filtrer les comptes">
+        <label class="sr" for="fc-q">Rechercher un compte par nom ou adresse</label><input class="saisie f-rech" type="search" id="fc-q" placeholder="Rechercher un nom ou une adresse" value="${esc(FC.q)}" oninput="FC.q=this.value;rendreComptes()">
+        <label class="sr" for="fc-role">Rôle</label><select class="saisie" id="fc-role" onchange="FC.role=this.value;rendreComptes()">${optF('','Tous les rôles',FC.role)}${['enseignant','vie_scolaire','direction','admin'].filter(nRole).map(r=>optF(r,(r==='admin'?'Administrateur':ROLE_L[r])+' ('+nRole(r)+')',FC.role)).join('')}</select>
+        <label class="sr" for="fc-etat">État du compte</label><select class="saisie" id="fc-etat" onchange="FC.etat=this.value;rendreComptes()">${optF('','Tous les états',FC.etat)}${optF('connecte','Déjà connecté ('+nEtat.connecte+')',FC.etat)}${optF('attente','À activer, mot de passe à choisir ('+nEtat.attente+')',FC.etat)}${optF('desactive','Désactivé ('+nEtat.desactive+')',FC.etat)}</select>
+        <label class="sr" for="fc-tri">Ordre de la liste</label><select class="saisie" id="fc-tri" onchange="FC.tri=this.value;rendreComptes()">${optF('nom','Par nom',FC.tri)}${optF('connexion','Dernière connexion d\'abord',FC.tri)}</select>
+        <span class="compte-aff" id="fc-n" aria-live="polite"></span>
+      </div>
+      <div class="cadre cadre-cpt" id="cpt-liste" role="region" aria-label="Liste des comptes" tabindex="0"></div>
     </section>
-    <section class="carte bloc cote"><h2>Créer un compte</h2>
+    <section class="carte bloc cote fixe"><h2>Créer un compte</h2>
       <div class="ligne2"><label class="champ"><small>Prénom</small><input class="saisie" id="nu-pn"></label><label class="champ"><small>Nom</small><input class="saisie" id="nu-nm"></label></div>
       <label class="champ"><small>Adresse @egd.mg</small><input class="saisie" type="email" id="nu-em" placeholder="prenom.nom@egd.mg"></label>
       <label class="champ"><small>Rôle</small><select class="saisie" id="nu-ro"><option value="enseignant">Enseignant</option><option value="vie_scolaire">Vie scolaire</option><option value="direction">Direction</option>${moiAdmin?`<option value="admin">${esc(ROLE_L.admin)}</option>`:''}</select></label>
@@ -2042,11 +2111,62 @@ async function vueComptes(mc){
       <button class="btn btn-bleu" onclick="creerCompte(this)">Créer le compte</button>
       <p class="aide">Les collègues ne seront prévenus que si la case est cochée.</p>
     </section></div>
-    <section class="carte bloc"><h2>Journal d'activité <span class="aide">(${logs.length} dernières entrées, dont ${connexions} connexions)</span></h2>
-      ${jd._ko?`<p class="txt">${esc(msgErr(jd._ko))}</p>`:`<div class="defile"><table class="journal"><thead><tr><th>Date</th><th>Personne</th><th>Action</th><th>Détail</th><th>Lieu</th><th>Appareil</th></tr></thead><tbody>
-        ${logs.map(l=>`<tr><td style="white-space:nowrap;color:var(--gris)">${esc(fmtDateHeure(l.quand))}</td><td>${esc(l.email||'')} ${l.role?tag(l.role):''}</td><td style="font-weight:500">${esc(l.action||'')}</td><td>${esc(l.detail||'')}</td><td style="white-space:nowrap">${[l.ville,l.pays].filter(Boolean).map(esc).join(', ')||'non connu'}</td><td style="white-space:nowrap;color:var(--gris)">${[l.navigateur,l.os,l.appareil].filter(Boolean).map(esc).join(', ')}</td></tr>`).join('')||'<tr><td colspan="6">Aucune entrée.</td></tr>'}
-      </tbody></table></div>`}
+    <section class="carte bloc" aria-labelledby="t-jr"><h2 id="t-jr">Journal d'activité <span class="aide">(${logs.length} dernières entrées, dont ${connexions} connexions réussies)</span></h2>
+      ${jd._ko?`<p class="txt">${esc(msgErr(jd._ko))}</p>`:`<div class="barre-f" role="search" aria-label="Filtrer le journal">
+        <label class="sr" for="fj-q">Rechercher dans le journal</label><input class="saisie f-rech" type="search" id="fj-q" placeholder="Rechercher une personne, un projet, un lieu" value="${esc(FJ.q)}" oninput="FJ.q=this.value;rendreJournal()">
+        <label class="sr" for="fj-fam">Type d'action</label><select class="saisie" id="fj-fam" onchange="FJ.fam=this.value;rendreJournal()">${optF('','Toutes les actions',FJ.fam)}${fams.map(([k,t,n])=>optF(k,t+' ('+n+')',FJ.fam)).join('')}</select>
+        <label class="sr" for="fj-qui">Personne</label><select class="saisie" id="fj-qui" onchange="FJ.qui=this.value;rendreJournal()">${optF('','Toutes les personnes',FJ.qui)}${qui.map(e=>optF(e,e,FJ.qui)).join('')}</select>
+        <label class="sr" for="fj-per">Période</label><select class="saisie" id="fj-per" onchange="FJ.periode=this.value;rendreJournal()">${optF('','Toute la période',FJ.periode)}${optF('jour','Aujourd\'hui',FJ.periode)}${optF('7','7 derniers jours',FJ.periode)}${optF('30','30 derniers jours',FJ.periode)}</select>
+        <label class="sr" for="fj-tri">Ordre du journal</label><select class="saisie" id="fj-tri" onchange="FJ.tri=this.value;rendreJournal()">${optF('recent','Plus récent d\'abord',FJ.tri)}${optF('ancien','Plus ancien d\'abord',FJ.tri)}</select>
+        <label class="f-case"><input type="checkbox" id="fj-svg"${FJ.svg?' checked':''} onchange="FJ.svg=this.checked;rendreJournal()"> Afficher les sauvegardes automatiques</label>
+        <span class="compte-aff" id="fj-n" aria-live="polite"></span>
+      </div>
+      <div class="cadre cadre-jr" role="region" aria-label="Entrées du journal" tabindex="0"><table class="journal"><thead><tr><th scope="col">Date</th><th scope="col">Action</th><th scope="col">Personne</th><th scope="col">Détail</th><th scope="col">Lieu</th><th scope="col">Appareil</th></tr></thead><tbody id="jr-corps"></tbody></table></div>`}
     </section></div>`;
+  rendreComptes();
+  if(!jd._ko) rendreJournal();
+}
+function ligneCompte(u){
+  const soi=u.email===S.user.email, protege=soi||(u.role==='admin'&&!CPT.moiAdmin);
+  const roles=['enseignant','vie_scolaire','direction'].concat(u.role==='admin'||CPT.moiAdmin?['admin']:[]);
+  const etat=!u.actif?' <span class="role" style="background:#FDECEC;color:#9B1C1C">désactivé</span>':(!u.active?' <span class="role" style="background:#FFF1D6;color:#7A4A00" title="Mot de passe pas encore choisi">à activer</span>':'');
+  return `<div class="cpt${u.actif?'':' inactif'}"><span class="cpt-nom"><strong>${esc(u.prenom||'')} ${esc(u.nom||'')}</strong>${etat}</span><small class="cpt-info" title="${esc(u.email)}">${esc(u.email)}${u.derniere_connexion?', dernière connexion le '+esc(fmtDateHeure(u.derniere_connexion)):', jamais connecté'}</small>
+    <span class="gestes">${protege?tagRole(u.role):`<select class="sel-role" aria-label="Rôle de ${esc(u.email)}" onchange="changerRole('${jsq(u.id)}',this)">${roles.map(r=>`<option value="${r}"${r===u.role?' selected':''}>${esc(ROLE_L[r])}</option>`).join('')}</select>
+      ${u.actif?`<button class="btn btn-clair btn-petit" onclick="envoyerLien('${jsq(u.id)}','${jsq(u.email)}')" title="Envoyer un lien pour choisir son mot de passe" aria-label="Envoyer un lien à ${esc(u.email)}">Lien</button>`:''}
+      <button class="btn btn-clair btn-petit" onclick="activer('${jsq(u.id)}','${jsq(u.email)}',${!u.actif})" aria-label="${u.actif?'Désactiver':'Réactiver'} le compte ${esc(u.email)}">${u.actif?'Désactiver':'Réactiver'}</button>
+      <button class="btn btn-danger btn-petit" onclick="supprimerCompte('${jsq(u.id)}','${jsq(u.email)}')" aria-label="Supprimer le compte ${esc(u.email)}">Supprimer</button>`}</span></div>`;
+}
+function rendreComptes(){
+  const box=$('cpt-liste'); if(!box) return;
+  const us=CPT.us, q=norm(FC.q).trim(), cle=(u)=>norm(u.nom)+' '+norm(u.prenom), quand=(u)=>Date.parse(u.derniere_connexion||'')||0;
+  const l=us.filter(u=>(!FC.role||u.role===FC.role)
+      &&(!FC.etat||(FC.etat==='desactive'?!u.actif:FC.etat==='attente'?(u.actif&&!u.active):!!u.derniere_connexion))
+      &&(!q||norm([u.prenom,u.nom,u.email].join(' ')).includes(q)))
+    .sort(FC.tri==='connexion'?(a,b)=>quand(b)-quand(a)||cle(a).localeCompare(cle(b),'fr'):(a,b)=>cle(a).localeCompare(cle(b),'fr'));
+  $('fc-n').textContent=l.length===us.length?us.length+' comptes':l.length+' sur '+us.length;
+  box.innerHTML=l.map(ligneCompte).join('')||'<p class="aide vide-filtre">Aucun compte ne correspond à ces filtres.</p>';
+}
+function rendreJournal(){
+  const corps=$('jr-corps'); if(!corps) return;
+  const logs=CPT.logs, q=norm(FJ.q).trim(), maintenant=new Date();
+  const depuis=FJ.periode==='jour'?new Date(maintenant.getFullYear(),maintenant.getMonth(),maintenant.getDate()).getTime()
+    :FJ.periode?maintenant.getTime()-Number(FJ.periode)*864e5:0;
+  const cacherSvg=!FJ.svg&&FJ.fam!=='svg'&&!FJ.qui;
+  let masquees=0;
+  const l=logs.filter(x=>{
+    const [lib,fam]=actionJ(x.action);
+    if(cacherSvg&&fam==='svg'){ masquees++; return false; }
+    if(FJ.fam&&fam!==FJ.fam) return false;
+    if(FJ.qui&&x.email!==FJ.qui) return false;
+    if(depuis&&(Date.parse(x.quand)||0)<depuis) return false;
+    return !q||norm([x.email,lib,x.action,x.detail,x.ville,x.pays,x.navigateur,x.os,x.appareil,ROLE_L[x.role]].join(' ')).includes(q);
+  });
+  if(FJ.tri==='ancien') l.reverse();
+  $('fj-n').textContent=(l.length===logs.length?logs.length+' entrées':l.length+' sur '+logs.length)+(masquees?', '+masquees+' sauvegardes masquées':'');
+  corps.innerHTML=l.map(x=>{
+    const [lib,fam]=actionJ(x.action);
+    return `<tr><td class="j-date" style="white-space:nowrap;color:var(--gris)">${esc(fmtDateHeure(x.quand))}</td><td class="j-act${fam==='echec'?' j-alerte':''}" style="font-weight:600" title="${esc(x.action||'')}">${esc(lib)}</td><td>${esc(x.email||'')} ${x.role?tagRole(x.role):''}</td><td>${esc(x.detail||'')}</td><td class="j-lieu" style="white-space:nowrap">${[x.ville,x.pays].filter(Boolean).map(esc).join(', ')||'non connu'}</td><td class="j-app" style="white-space:nowrap;color:var(--gris)">${[x.navigateur,x.os,x.appareil].filter(Boolean).map(esc).join(', ')}</td></tr>`;
+  }).join('')||'<tr><td colspan="6">Aucune entrée ne correspond à ces filtres.</td></tr>';
 }
 const rafraichirComptes=()=>vueComptes($('mc'));
 function creerCompte(btn){
